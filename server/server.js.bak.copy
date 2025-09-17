@@ -1,0 +1,1809 @@
+import express from 'express';
+import cors from 'cors';
+import db from '../src/config/db.config.js';
+import wordpressHash from 'wordpress-hash-node';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+
+// Import countryCodeToName for converting country codes to names
+import { countryCodeToName } from './countries.js';
+
+dotenv.config();
+
+const app = express();
+
+app.use(cors({
+  origin: ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:5173'],
+  credentials: true
+}));
+app.use(express.json());
+
+// Function to decode HTML entities
+const decodeHtmlEntities = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+};
+
+// کلید مخفی برای امضای توکن
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secure-jwt-secret'; // بهتر است از .env خوانده شود
+
+// Middleware برای تأیید توکن
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  console.log('Auth header:', authHeader);
+  const token = authHeader?.split(' ')[1];
+
+  if (!token) {
+    console.log('No token provided');
+    return res.sendStatus(401);
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log('Token verification failed:', err.message);
+      return res.sendStatus(403);
+    }
+    console.log('Token verified successfully for user:', user.email);
+    req.user = user;
+    next();
+  });
+};
+
+const convertNumber = (value) => {
+  if (!value) return 0;
+  const cleaned = value.replace(/,/g, '').trim();
+  return isNaN(cleaned) ? 0 : parseInt(cleaned, 10);
+};
+
+const countryMap = {
+  24: 'United States',
+  25: 'Canada',
+  233: 'England',
+  363: 'Germany',
+  298: 'Italy',
+};
+
+const BASE_UPLOADS_URL = process.env.BASE_UPLOADS_URL || 'http://questapply.com/wp-content/uploads/';
+
+// API endpoint برای دریافت اطلاعات کاربر
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  const { email } = req.user;
+
+  try {
+    const [users] = await db.query(`
+      SELECT 
+        u.user_nicename,
+        u.user_login,
+        u.user_email,
+        um1.meta_value as user_plan,
+        um2.meta_value as account_type
+      FROM qacom_wp_users u
+      LEFT JOIN qacom_wp_usermeta um1 ON u.ID = um1.user_id AND um1.meta_key = 'user_plan_set'
+      LEFT JOIN qacom_wp_usermeta um2 ON u.ID = um2.user_id AND um2.meta_key = 'application_apply_yourself_type'
+      WHERE u.user_email = ?`, [email]);
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+
+    const planMap = {
+      '0': 'Free',
+      '1': 'Basic',
+      '2': 'Premium',
+      '3': 'Concierge'
+    };
+
+    const accountType = user.account_type === 'pro' ? 'Pro' : 'Free';
+    const userPlan = parseInt(user.user_plan, 10);
+
+    const formattedUser = {
+      name: user.user_nicename || user.user_login,
+      email: user.user_email,
+      plan: accountType === 'Free' ? 'Free' : planMap[userPlan] || 'Basic',
+      accountType: accountType
+    };
+
+    res.json(formattedUser);
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint برای ورود
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const [users] = await db.query(`
+      SELECT user_email, user_pass 
+      FROM qacom_wp_users 
+      WHERE user_email = ?`, [email]);
+
+    if (!users || users.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const user = users[0];
+    const isPasswordValid = user.user_pass;
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const token = jwt.sign({ email: user.user_email }, JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({ message: 'Login successful', token, user: { email: user.user_email } });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint Find schools
+app.get('/api/schools', authenticateToken, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const { email } = req.user;
+
+    // First, get the user's profile data for filters
+    const [userData] = await db.query(`
+      SELECT ID
+      FROM qacom_wp_users
+      WHERE user_email = ?
+    `, [email]);
+
+    if (!userData || userData.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = userData[0].ID;
+
+    // Get user profile preferences for filtering
+    const [userMetas] = await db.query(`
+      SELECT meta_key, meta_value
+      FROM qacom_wp_usermeta
+      WHERE user_id = ? 
+      AND meta_key IN ('application_country', 'application_level', 'application_program')
+    `, [userId]);
+
+    // Convert metas to object
+    const userPreferences = {
+      country: null,
+      level: null,
+      program: null,
+      areaOfStudy: null
+    };
+
+    userMetas.forEach(meta => {
+      if (meta.meta_key === 'application_country') {
+        userPreferences.country = meta.meta_value;
+      } else if (meta.meta_key === 'application_level') {
+        userPreferences.level = meta.meta_value;
+      } else if (meta.meta_key === 'application_program') {
+        userPreferences.program = meta.meta_value;
+      }
+    });
+
+    // Get program category (area of study) for the selected program
+    let programCategoryId = null;
+    if (userPreferences.program) {
+     
+      // First try to get program with its category using a direct join with qacom_wp_apply_programs
+      const [programData] = await db.query(`
+        SELECT p.id, p.name, p.category_id, t.name as category_name
+        FROM qacom_wp_apply_programs p
+        LEFT JOIN qacom_wp_terms t ON p.category_id = t.term_id
+        WHERE p.id = ?
+        LIMIT 1
+      `, [userPreferences.program]);
+
+      // Check if we found the program with its category
+      if (programData && programData.length > 0 && programData[0].category_id) {
+        // We found both program and its category
+        userPreferences.areaOfStudy = {
+          id: programData[0].category_id,
+          name: decodeHtmlEntities(programData[0].category_name)
+        };
+        userPreferences.programDetails = {
+          id: programData[0].id,
+          name: decodeHtmlEntities(programData[0].name)
+        };
+        programCategoryId = programData[0].category_id;
+        
+        console.log("Set area of study from category_id:", userPreferences.areaOfStudy);
+        console.log("Set program details:", userPreferences.programDetails);
+      } else {
+        // If the direct approach failed, try using term_relationships
+        console.log("No direct category_id found, trying term_relationships for program ID:", userPreferences.program);
+        
+        // Get basic program details first
+        const [basicProgramData] = await db.query(`
+          SELECT id, name
+          FROM qacom_wp_apply_programs
+          WHERE id = ?
+          LIMIT 1
+        `, [userPreferences.program]);
+        
+        console.log("Basic program data:", basicProgramData);
+        
+        if (basicProgramData && basicProgramData.length > 0) {
+          // We found the program, set its details
+          userPreferences.programDetails = {
+            id: basicProgramData[0].id,
+            name: basicProgramData[0].name
+          };
+          console.log("Set program details from basic query:", userPreferences.programDetails);
+          
+          // Now try to find the category using term_relationships
+          const [categoryData] = await db.query(`
+            SELECT tt.term_id, t.name
+            FROM qacom_wp_term_relationships tr
+            JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+            JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+            WHERE tr.object_id = ? AND tt.taxonomy = 'program_category'
+            LIMIT 1
+          `, [userPreferences.program]);
+          
+          console.log("Category data from term_relationships query:", categoryData);
+          
+          if (categoryData && categoryData.length > 0) {
+            // We found the category, set it
+            userPreferences.areaOfStudy = {
+              id: categoryData[0].term_id,
+              name: decodeHtmlEntities(categoryData[0].name)
+            };
+            programCategoryId = categoryData[0].term_id;
+            console.log("Set area of study from term_relationships:", userPreferences.areaOfStudy);
+          } else {
+            // We still couldn't find the category, try a direct lookup in the database
+            console.log("Could not find category through term_relationships, trying direct lookup");
+            
+            // This is a hardcoded fallback for specific program IDs
+            // For program ID 7, we know it should be Engineering & Technology (ID 6)
+            if (userPreferences.program === '7') {
+              const [engineeringCategory] = await db.query(`
+                SELECT term_id, name
+                FROM qacom_wp_terms
+                WHERE term_id = 6
+                LIMIT 1
+              `);
+              
+              if (engineeringCategory && engineeringCategory.length > 0) {
+                userPreferences.areaOfStudy = {
+                  id: engineeringCategory[0].term_id,
+                  name: decodeHtmlEntities(engineeringCategory[0].name)
+                };
+                programCategoryId = engineeringCategory[0].term_id;
+                console.log("Set area of study from hardcoded fallback:", userPreferences.areaOfStudy);
+              }
+            } else {
+              console.log("Could not find category for program ID:", userPreferences.program);
+            }
+          }
+        } else {
+          // We couldn't even find the program, log the issue
+          console.log("Could not find program with ID:", userPreferences.program);
+        }
+      }
+    }
+
+    // Get country data if country ID is available
+    if (userPreferences.country) {
+      const countryId = userPreferences.country;
+      userPreferences.countryDetails = {
+        id: countryId,
+        name: countryMap[countryId] || `Unknown (${countryId})`
+      };
+
+      // Get states for this country from place taxonomy
+      const [statesData] = await db.query(`
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+        WHERE tt.taxonomy = 'place' AND tt.parent = ?
+      `, [countryId]);
+
+      if (statesData && statesData.length > 0) {
+        userPreferences.countryDetails.states = statesData.map(state => ({
+          id: state.term_id,
+          name: state.name
+        }));
+      }
+    }
+
+    // Get all available countries from place taxonomy
+    const [countriesData] = await db.query(`
+      SELECT t.term_id, t.name
+      FROM qacom_wp_term_taxonomy tt
+      JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+      WHERE tt.taxonomy = 'place' AND tt.parent = 0
+    `);
+
+    if (countriesData && countriesData.length > 0) {
+      userPreferences.availableCountries = countriesData.map(country => ({
+        id: country.term_id,
+        name: country.name
+      }));
+    }
+
+    // Get all program categories (areas of study)
+    const [categoriesData] = await db.query(`
+      SELECT t.term_id, t.name
+      FROM qacom_wp_term_taxonomy tt
+      JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+      WHERE tt.taxonomy = 'program_category'
+      ORDER BY t.name ASC
+    `);
+
+    if (categoriesData && categoriesData.length > 0) {
+      userPreferences.availableAreasOfStudy = categoriesData.map(category => ({
+        id: category.term_id,
+        name: decodeHtmlEntities(category.name)
+      }));
+      
+      // If we have a program but couldn't find its area of study, try to find it now
+      if (userPreferences.program && !userPreferences.areaOfStudy) {
+        console.log("Trying to find area of study for program:", userPreferences.program);
+        
+        // Try to find the category for this program
+        const [programCategoryData] = await db.query(`
+          SELECT tr.object_id, tt.term_id, t.name
+          FROM qacom_wp_term_relationships tr
+          JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+          JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+          WHERE tr.object_id = ? AND tt.taxonomy = 'program_category'
+        `, [userPreferences.program]);
+        
+        console.log("Program category data:", programCategoryData);
+        
+        if (programCategoryData && programCategoryData.length > 0) {
+          userPreferences.areaOfStudy = {
+            id: programCategoryData[0].term_id,
+            name: programCategoryData[0].name
+          };
+          programCategoryId = programCategoryData[0].term_id;
+          console.log("Found area of study for program:", userPreferences.areaOfStudy);
+        } else {
+          // If we still can't find it, use the first category as default
+          userPreferences.areaOfStudy = {
+            id: categoriesData[0].term_id,
+            name: decodeHtmlEntities(categoriesData[0].name)
+          };
+          console.log("Using default area of study:", userPreferences.areaOfStudy);
+        }
+      }
+    }
+
+    // Get all programs related to the selected area of study
+    if (userPreferences.areaOfStudy) {
+      const [programsData] = await db.query(`
+        SELECT p.id, p.name
+        FROM qacom_wp_apply_programs p
+        JOIN qacom_wp_term_relationships tr ON p.id = tr.object_id
+        JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+        WHERE tt.taxonomy = 'program_category' AND tt.term_id = ?
+        ORDER BY p.name ASC
+      `, [userPreferences.areaOfStudy.id]);
+
+      if (programsData && programsData.length > 0) {
+        userPreferences.availablePrograms = programsData.map(program => ({
+          id: program.id,
+          name: decodeHtmlEntities(program.name)
+        }));
+      }
+    }
+
+    // Build filters for SQL query
+    let whereConditions = [];
+    let parameters = [BASE_UPLOADS_URL];
+    
+    // Create a more comprehensive query similar to the WordPress function
+    let sqlQuery = `
+      SELECT 
+        s.id, s.name, s.country, s.state, s.kind, s.link,
+        CASE 
+          WHEN s.image REGEXP '^[0-9]+$' THEN 
+            (SELECT CONCAT(?, pm.meta_value)
+             FROM qacom_wp_postmeta pm
+             WHERE pm.post_id = CAST(s.image AS UNSIGNED)
+             AND pm.meta_key = '_wp_attached_file')
+          ELSE s.image
+        END AS image,
+        MAX(CASE WHEN sm.meta_key = 'cost_graduate_in_state' THEN sm.meta_value END) AS cost_graduate_in_state,
+        MAX(CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN sm.meta_value END) AS cost_undergrade_out_of_state,
+        MAX(CASE WHEN sm.meta_key = 'graduate_student' THEN sm.meta_value END) AS graduate_student,
+        MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
+        MAX(CASE WHEN sm.meta_key = 'men_number_applied' THEN sm.meta_value END) AS men_number_applied,
+        MAX(CASE WHEN sm.meta_key = 'women_number_applied' THEN sm.meta_value END) AS women_number_applied,
+        MAX(CASE WHEN sm.meta_key = 'men_number_admitted' THEN sm.meta_value END) AS men_number_admitted,
+        MAX(CASE WHEN sm.meta_key = 'women_number_admitted' THEN sm.meta_value END) AS women_number_admitted,
+        MAX(CASE WHEN sm.meta_key = 'qs_rank' THEN sm.meta_value END) AS qs_rank,
+        MAX(CASE WHEN sm.meta_key = 'us_news_rank' THEN sm.meta_value END) AS us_news_rank,
+        MAX(CASE WHEN sm.meta_key = 'forbes_rank' THEN sm.meta_value END) AS forbes_rank,
+        MAX(CASE WHEN sm.meta_key = 'shanghai_rank' THEN sm.meta_value END) AS shanghai_rank,
+        MAX(CASE WHEN sm.meta_key = 'the_rank' THEN sm.meta_value END) AS the_rank
+      FROM qacom_wp_apply_schools s
+      LEFT JOIN qacom_wp_apply_schools_meta sm ON s.id = sm.school_id
+      WHERE s.status = 'publish'
+    `;
+
+    // Filter by country from query parameters
+    if (req.query.country) {
+      sqlQuery += ` AND s.country = ?`;
+      parameters.push(req.query.country);
+    } else if (userPreferences.country) {
+      sqlQuery += ` AND s.country = ?`;
+      parameters.push(userPreferences.country);
+    }
+
+    // Build complex program filtering using EXISTS clause
+    let programFilters = [];
+    
+    // Filter by program level from query parameters
+    if (req.query.degreeLevel) {
+      let level = req.query.degreeLevel;
+      if (level === "PhD") level = "Ph.D.";
+      programFilters.push("pr.level = ?");
+      parameters.push(level);
+    } else if (userPreferences.level) {
+      programFilters.push("pr.level = ?");
+      parameters.push(userPreferences.level);
+    }
+
+    // Filter by specific program from query parameters
+    if (req.query.program) {
+      programFilters.push("pr.program_id = ?");
+      parameters.push(req.query.program);
+    } else if (userPreferences.program) {
+      programFilters.push("pr.program_id = ?");
+      parameters.push(userPreferences.program);
+    }
+    // Filter by program category (area of study) from query parameters
+    else if (req.query.areaOfStudy) {
+      programFilters.push(`
+        EXISTS (
+          SELECT 1 
+          FROM qacom_wp_apply_programs p
+          JOIN qacom_wp_term_relationships tr ON p.id = tr.object_id
+          JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+          WHERE pr.program_id = p.id AND tt.taxonomy = 'program_category' AND tt.term_id = ?
+        )
+      `);
+      parameters.push(req.query.areaOfStudy);
+    } else if (programCategoryId) {
+      programFilters.push(`
+        EXISTS (
+          SELECT 1 
+          FROM qacom_wp_apply_programs p
+          JOIN qacom_wp_term_relationships tr ON p.id = tr.object_id
+          JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+          WHERE pr.program_id = p.id AND tt.taxonomy = 'program_category' AND tt.term_id = ?
+        )
+      `);
+      parameters.push(programCategoryId);
+    }
+
+    // Add the program filters using EXISTS clause if any program filters exist
+    if (programFilters.length > 0) {
+      sqlQuery += `
+        AND EXISTS (
+          SELECT 1
+          FROM qacom_wp_apply_programs_relationship pr
+          WHERE pr.school_id = s.id
+          AND pr.status = 'publish'
+          AND ${programFilters.join(" AND ")}
+        )
+      `;
+    }
+
+    // Add GROUP BY, ORDER BY, and LIMIT
+    sqlQuery += `
+      GROUP BY s.id, s.name, s.country, s.state, s.kind, s.link, s.image
+      ORDER BY 
+        COALESCE(MAX(CASE WHEN sm.meta_key = 'qs_rank' THEN CAST(sm.meta_value AS UNSIGNED) END), 9999),
+        s.id ASC
+      LIMIT ? OFFSET ?
+    `;
+
+    // Add the limit and offset parameters
+    parameters.push(limit, offset);
+
+    // Now get the schools data with filters
+    let rows;
+    try {
+      const [queryRows] = await db.query(sqlQuery, parameters);
+      rows = queryRows;
+    } catch (error) {
+      console.error("Error executing school query:", error);
+      rows = [];
+    }
+
+    if (!rows || rows.length === 0) {
+      // If no schools match the filters, return all schools
+      console.log('No schools matched the filters, returning all schools');
+      
+      // Reset parameters
+      parameters = [BASE_UPLOADS_URL, limit, offset];
+      
+      try {
+        const fallbackQuery = `
+          SELECT 
+            s.id, s.name, s.country, s.state, s.kind, s.link,
+            CASE 
+              WHEN s.image REGEXP '^[0-9]+$' THEN 
+                (SELECT CONCAT(?, pm.meta_value)
+                 FROM qacom_wp_postmeta pm
+                 WHERE pm.post_id = CAST(s.image AS UNSIGNED)
+                 AND pm.meta_key = '_wp_attached_file')
+              ELSE s.image
+            END AS image,
+            MAX(CASE WHEN sm.meta_key = 'cost_graduate_in_state' THEN sm.meta_value END) AS cost_graduate_in_state,
+            MAX(CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN sm.meta_value END) AS cost_undergrade_out_of_state,
+            MAX(CASE WHEN sm.meta_key = 'graduate_student' THEN sm.meta_value END) AS graduate_student,
+            MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
+            MAX(CASE WHEN sm.meta_key = 'men_number_applied' THEN sm.meta_value END) AS men_number_applied,
+            MAX(CASE WHEN sm.meta_key = 'women_number_applied' THEN sm.meta_value END) AS women_number_applied,
+            MAX(CASE WHEN sm.meta_key = 'men_number_admitted' THEN sm.meta_value END) AS men_number_admitted,
+            MAX(CASE WHEN sm.meta_key = 'women_number_admitted' THEN sm.meta_value END) AS women_number_admitted,
+            MAX(CASE WHEN sm.meta_key = 'qs_rank' THEN sm.meta_value END) AS qs_rank,
+            MAX(CASE WHEN sm.meta_key = 'us_news_rank' THEN sm.meta_value END) AS us_news_rank,
+            MAX(CASE WHEN sm.meta_key = 'forbes_rank' THEN sm.meta_value END) AS forbes_rank,
+            MAX(CASE WHEN sm.meta_key = 'shanghai_rank' THEN sm.meta_value END) AS shanghai_rank,
+            MAX(CASE WHEN sm.meta_key = 'the_rank' THEN sm.meta_value END) AS the_rank
+          FROM qacom_wp_apply_schools s
+          LEFT JOIN qacom_wp_apply_schools_meta sm ON s.id = sm.school_id
+          WHERE s.status = 'publish'
+          GROUP BY s.id, s.name, s.country, s.state, s.kind, s.link, s.image
+          ORDER BY 
+            COALESCE(MAX(CASE WHEN sm.meta_key = 'qs_rank' THEN CAST(sm.meta_value AS UNSIGNED) END), 9999),
+            s.id ASC
+          LIMIT ? OFFSET ?
+        `;
+        
+        const [allRows] = await db.query(fallbackQuery, parameters);
+        
+        rows = allRows;
+      } catch (error) {
+        console.error("Error executing fallback school query:", error);
+        rows = [];
+      }
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'No schools found' });
+      }
+    }
+
+    // Format schools data as before
+    const schools = await Promise.all(rows.map(async (school) => {
+      const [programRows] = await db.query(`
+        SELECT 
+          COUNT(*) AS total_programs,
+          SUM(CASE WHEN level = 'Master' THEN 1 ELSE 0 END) AS master_count,
+          SUM(CASE WHEN level = 'Ph.D.' THEN 1 ELSE 0 END) AS phd_count,
+          SUM(CASE WHEN level = 'Bachelor' THEN 1 ELSE 0 END) AS bachelor_count
+        FROM qacom_wp_apply_programs_relationship
+        WHERE school_id = ? AND status = 'publish'
+      `, [school.id]);
+
+      // Calculate Graduation Rate
+      const graduateStudent = convertNumber(school.graduate_student);
+      const undergradeStudent = convertNumber(school.undergrade_student);
+      const totalStudents = graduateStudent + undergradeStudent;
+      const graduationRate = totalStudents > 0 ? Math.round((graduateStudent / totalStudents) * 100) : 0;
+
+      // Calculate Acceptance Rate
+      const menApplied = convertNumber(school.men_number_applied);
+      const womenApplied = convertNumber(school.women_number_applied);
+      const menAdmitted = convertNumber(school.men_number_admitted);
+      const womenAdmitted = convertNumber(school.women_number_admitted);
+      const totalApplied = menApplied + womenApplied;
+      const totalAdmitted = menAdmitted + womenAdmitted;
+      const acceptanceRate = totalApplied > 0 ? Math.round((totalAdmitted / totalApplied) * 100) : 0;
+
+      // Format programs
+      const programs = [];
+      const masterCount = programRows[0]?.master_count || 0;
+      const phdCount = programRows[0]?.phd_count || 0;
+      const bachelorCount = programRows[0]?.bachelor_count || 0;
+      if (masterCount > 0) programs.push(`Master: ${masterCount} Programs`);
+      if (phdCount > 0) programs.push(`Ph.D: ${phdCount} Programs`);
+      if (bachelorCount > 0) programs.push(`Bachelor: ${bachelorCount} Programs`);
+
+      const countryName = countryMap[school.country] || 'Unknown';
+      // Clean up country name by removing parentheses and their contents
+      const cleanCountryName = countryName.replace(/\s*\([^)]*\)/g, '').trim();
+      
+      return {
+        id: school.id,
+        name: decodeHtmlEntities(school.name),
+        location: `${cleanCountryName}${school.state ? `, ${decodeHtmlEntities(school.state)}` : ''}`,
+        logo: school.image || '',
+        ranking: {
+          qs:school.qs_rank || 'N/A',
+          usNews: school.us_news_rank || 'N/A',
+          forbes: school.forbes_rank || 'N/A',
+          shanghai: school.shanghai_rank || 'N/A',
+          the: school.the_rank || 'N/A',
+        },
+        programs,
+        acceptance: acceptanceRate,
+        graduation: graduationRate,
+        cost: {
+          inState: convertNumber(school.cost_graduate_in_state),
+          outState: convertNumber(school.cost_undergrade_out_of_state),
+        },
+        // favorite is managed client-side
+      };
+    }));
+
+    // Add applied filters info to the response
+    userPreferences.appliedFilters = {
+      country: userPreferences.country !== null,
+      level: userPreferences.level !== null,
+      program: userPreferences.program !== null,
+      areaOfStudy: programCategoryId !== null
+    };
+
+    // Return both the schools data and user preferences for filtering
+    res.json({
+      schools,
+      userPreferences
+    });
+  } catch (error) {
+    console.error('Error fetching schools:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint for school details
+app.get('/api/school/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [rows] = await db.query(`
+      SELECT 
+        s.id, s.name, s.country, s.state, s.kind, s.link,
+        CASE 
+          WHEN s.image REGEXP '^[0-9]+$' THEN 
+            (SELECT CONCAT(?, pm.meta_value)
+             FROM qacom_wp_postmeta pm
+             WHERE pm.post_id = CAST(s.image AS UNSIGNED)
+             AND pm.meta_key = '_wp_attached_file')
+          ELSE s.image
+        END AS image,
+        MAX(CASE WHEN sm.meta_key = 'cost_graduate_in_state' THEN sm.meta_value END) AS cost_graduate_in_state,
+        MAX(CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN sm.meta_value END) AS cost_undergrade_out_of_state,
+        MAX(CASE WHEN sm.meta_key = 'graduate_student' THEN sm.meta_value END) AS graduate_student,
+        MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
+        MAX(CASE WHEN sm.meta_key = 'men_number_applied' THEN sm.meta_value END) AS men_number_applied,
+        MAX(CASE WHEN sm.meta_key = 'women_number_applied' THEN sm.meta_value END) AS women_number_applied,
+        MAX(CASE WHEN sm.meta_key = 'men_number_admitted' THEN sm.meta_value END) AS men_number_admitted,
+        MAX(CASE WHEN sm.meta_key = 'women_number_admitted' THEN sm.meta_value END) AS women_number_admitted,
+        MAX(CASE WHEN sm.meta_key = 'qs_rank' THEN sm.meta_value END) AS qs_rank,
+        MAX(CASE WHEN sm.meta_key = 'us_news_rank' THEN sm.meta_value END) AS us_news_rank,
+        MAX(CASE WHEN sm.meta_key = 'forbes_rank' THEN sm.meta_value END) AS forbes_rank,
+        MAX(CASE WHEN sm.meta_key = 'shanghai_rank' THEN sm.meta_value END) AS shanghai_rank,
+        MAX(CASE WHEN sm.meta_key = 'the_rank' THEN sm.meta_value END) AS the_rank,
+        MAX(CASE WHEN sm.meta_key = 'description' THEN sm.meta_value END) AS description,
+        MAX(CASE WHEN sm.meta_key = 'founded' THEN sm.meta_value END) AS founded,
+        MAX(CASE WHEN sm.meta_key = 'type' THEN sm.meta_value END) AS type,
+        MAX(CASE WHEN sm.meta_key = 'address' THEN sm.meta_value END) AS address,
+        MAX(CASE WHEN sm.meta_key = 'phone' THEN sm.meta_value END) AS phone
+      FROM qacom_wp_apply_schools s
+      LEFT JOIN qacom_wp_apply_schools_meta sm ON s.id = sm.school_id
+      WHERE s.id = ?
+      GROUP BY s.id, s.name, s.country, s.state, s.kind, s.link, s.image
+    `, [BASE_UPLOADS_URL, id]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'School not found' });
+    }
+
+    const school = rows[0];
+
+    const [programRows] = await db.query(`
+      SELECT 
+        SUM(CASE WHEN level = 'Master' THEN 1 ELSE 0 END) AS master_count,
+        SUM(CASE WHEN level = 'Ph.D.' THEN 1 ELSE 0 END) AS phd_count,
+        SUM(CASE WHEN level = 'Bachelor' THEN 1 ELSE 0 END) AS bachelor_count
+      FROM qacom_wp_apply_programs_relationship
+      WHERE school_id = ? AND status = 'publish'
+    `, [school.id]);
+
+    const graduateStudent = convertNumber(school.graduate_student);
+    const undergradeStudent = convertNumber(school.undergrade_student);
+    const totalStudents = graduateStudent + undergradeStudent;
+    const graduationRate = totalStudents > 0 ? Math.round((graduateStudent / totalStudents) * 100) : 0;
+
+    const menApplied = convertNumber(school.men_number_applied);
+    const womenApplied = convertNumber(school.women_number_applied);
+    const menAdmitted = convertNumber(school.men_number_admitted);
+    const womenAdmitted = convertNumber(school.men_number_admitted);
+    const totalApplied = menApplied + womenApplied;
+    const totalAdmitted = menAdmitted + womenAdmitted;
+    const acceptanceRate = totalApplied > 0 ? Math.round((totalAdmitted / totalApplied) * 100) : 0;
+
+    // فرمت جدید programs
+    const programs = [];
+    const masterCount = programRows[0]?.master_count || 0;
+    const phdCount = programRows[0]?.phd_count || 0;
+    const bachelorCount = programRows[0]?.bachelor_count || 0;
+    if (masterCount > 0) programs.push(`Master: ${masterCount} Programs`);
+    if (phdCount > 0) programs.push(`Ph.D: ${phdCount} Programs`);
+    if (bachelorCount > 0) programs.push(`Bachelor: ${bachelorCount} Programs`);
+
+    const countryName = countryMap[school.country] || `Unknown (${school.country})`;
+    // Clean up country name by removing parentheses and their contents
+    const cleanCountryName = countryName.replace(/\s*\([^)]*\)/g, '').trim();
+
+    const response = {
+      id: school.id,
+      name: school.name,
+      location: `${cleanCountryName}${school.state ? `, ${school.state}` : ''}`,
+      logo: school.image || '',
+      ranking: {
+        qs: convertNumber(school.qs_rank),
+        usNews: convertNumber(school.us_news_rank),
+        forbes: convertNumber(school.forbes_rank),
+        shanghai: convertNumber(school.shanghai_rank),
+        the: convertNumber(school.the_rank),
+      },
+      programs, // فرمت جدید
+      acceptance: acceptanceRate,
+      graduation: graduationRate,
+      cost: {
+        inState: convertNumber(school.cost_graduate_in_state),
+        outState: convertNumber(school.cost_undergrade_out_of_state),
+      },
+      description: school.description || '',
+      founded: convertNumber(school.founded) || undefined,
+      type: school.type || '',
+      address: school.address || '',
+      phone: school.phone || '',
+      // TODO: افزودن admissionsData, studentDemographics, و غیره
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching school:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint For Profile Form Get
+app.get('/api/user/profile-form', authenticateToken, async (req, res) => {
+  const { email } = req.user;
+
+  try {
+    // دریافت اطلاعات پایه کاربر
+    const [users] = await db.query(`
+      SELECT 
+        u.ID,
+        u.user_nicename,
+        u.user_login,
+        u.user_email
+      FROM qacom_wp_users u
+      WHERE u.user_email = ?`, [email]);
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = users[0].ID;
+
+    // دریافت متاهای کاربر - فقط متاهای مربوط به کشور و آموزش
+    const [userMetas] = await db.query(`
+      SELECT meta_key, meta_value
+      FROM qacom_wp_usermeta
+      WHERE user_id = ? AND meta_key IN ('citizen', 'country', 'profile_education', 'application_country', 
+                                        'application_level', 'application_program', 'application_english_test', 
+                                        'application_english_score', 'application_gre_total', 'application_gre_verbal',
+                                        'application_gre_quantitative', 'application_gre_writing', 'application_gmat_total',
+                                        'application_gmat_verbal', 'application_gmat_quantitative', 'application_gmat_writing',
+                                        'application_lsat_total')`, [userId]);
+
+    // تبدیل متاها به آبجکت
+    const metaData = {};
+    userMetas.forEach(meta => {
+      metaData[meta.meta_key] = meta.meta_value;
+    });
+
+    // تبدیل کد کشور به نام کامل کشور
+    const citizenship = metaData.citizen || '';
+    const currentCountry = metaData.country || '';
+    
+    // پردازش داده‌های آموزشی
+    let educationData = {
+      degree: "",
+      university: "",
+      major: "",
+      gpa: ""
+    };
+    
+    if (metaData.profile_education) {
+      try {
+        // متا profile_education به صورت سریالایز شده PHP ذخیره شده
+        // ابتدا تبدیل به رشته‌ای بدون s:xxx در ابتدا
+        const rawEducationData = metaData.profile_education.replace(/^s:\d+:"(.*)"$/, '$1');
+        
+        // تبدیل به ساختار JSON
+        // می‌دانیم که داده به صورت a:7:{...} است که باید آن را پارس کنیم
+        
+        // الگو برای تشخیص مقادیر level
+        const levelPattern = /s:5:"level";a:\d+:{(?:[^{}]|{[^{}]*})*}/;
+        const levelMatch = rawEducationData.match(levelPattern);
+        
+        if (levelMatch) {
+          const levelData = levelMatch[0];
+          // استخراج اولین مقدار برای level
+          const levelValuePattern = /i:0;s:\d+:"([^"]*)"/;
+          const levelValueMatch = levelData.match(levelValuePattern);
+          
+          if (levelValueMatch && levelValueMatch[1]) {
+            let degree = levelValueMatch[1];
+            // تبدیل به فرمت مورد نیاز
+            if (degree === 'Master') {
+              degree = "Master's Degree";
+            } else if (degree === 'Bachelor') {
+              degree = "Bachelor's Degree";
+            } else if (degree === 'PhD' || degree === 'Ph.D.') {
+              degree = "Doctoral Degree";
+            }
+            educationData.degree = degree;
+          }
+        }
+        
+        // الگو برای تشخیص مقادیر university
+        const universityPattern = /s:10:"university";a:\d+:{(?:[^{}]|{[^{}]*})*}/;
+        const universityMatch = rawEducationData.match(universityPattern);
+        
+        if (universityMatch) {
+          const universityData = universityMatch[0];
+          // استخراج اولین مقدار برای university
+          const universityValuePattern = /i:0;s:\d+:"([^"]*)"/;
+          const universityValueMatch = universityData.match(universityValuePattern);
+          
+          if (universityValueMatch && universityValueMatch[1]) {
+            educationData.university = universityValueMatch[1];
+          }
+        }
+        
+        // الگو برای تشخیص مقادیر program (major)
+        const programPattern = /s:7:"program";a:\d+:{(?:[^{}]|{[^{}]*})*}/;
+        const programMatch = rawEducationData.match(programPattern);
+        
+        if (programMatch) {
+          const programData = programMatch[0];
+          // استخراج اولین مقدار برای program
+          const programValuePattern = /i:0;s:\d+:"([^"]*)"/;
+          const programValueMatch = programData.match(programValuePattern);
+          
+          if (programValueMatch && programValueMatch[1]) {
+            educationData.major = programValueMatch[1].trim();
+          }
+        }
+        
+        // الگو برای تشخیص مقادیر gpa
+        const gpaPattern = /s:3:"gpa";a:\d+:{(?:[^{}]|{[^{}]*})*}/;
+        const gpaMatch = rawEducationData.match(gpaPattern);
+        
+        if (gpaMatch) {
+          const gpaData = gpaMatch[0];
+          // استخراج اولین مقدار برای gpa
+          const gpaValuePattern = /i:0;s:\d+:"([^"]*)"/;
+          const gpaValueMatch = gpaData.match(gpaValuePattern);
+          
+          if (gpaValueMatch && gpaValueMatch[1]) {
+            educationData.gpa = gpaValueMatch[1];
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing education data:', error);
+      }
+    }
+    
+    // پردازش داده‌های مقصد تحصیلی (destination)
+    let destinationData = {
+      country: "",
+      level: "",
+      field: ""
+    };
+    
+    // دریافت کشور مقصد از متا
+    if (metaData.application_country) {
+      const countryId = metaData.application_country;
+      destinationData.country = {
+        id: countryId,
+        name: countryMap[countryId] || `Unknown (${countryId})`
+      };
+    }
+    
+    // دریافت سطح تحصیلی از متا
+    if (metaData.application_level) {
+      let level = metaData.application_level;
+      
+      // تبدیل فرمت‌های مختلف به فرمت استاندارد UI
+      if (level === "Ph.D." || level === "PHD") {
+        level = "PhD";
+      } else if (level === "Master") {
+        level = "Master's Degree";
+      } else if (level === "Bachelor") {
+        level = "Bachelor's Degree";
+      }
+      
+      destinationData.level = level;
+    }
+    
+    // دریافت رشته تحصیلی از متا
+    let fieldName = "";
+    if (metaData.application_program) {
+      const programId = metaData.application_program;
+      
+      // دریافت نام برنامه از جدول برنامه‌ها
+      try {
+        const [programRows] = await db.query(`
+          SELECT id, name
+          FROM qacom_wp_apply_programs
+          WHERE id = ?
+        `, [programId]);
+        
+        if (programRows && programRows.length > 0) {
+          fieldName = programRows[0].name;
+          
+          destinationData.field = {
+            id: programId,
+            name: fieldName
+          };
+        } else {
+          
+          destinationData.field = {
+            id: programId,
+            name: "Selected Program"
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching program name:', error);
+        destinationData.field = {
+          id: programId,
+          name: "Selected Program"
+        };
+      }
+    }
+    
+    // دریافت لیست تمام برنامه‌های تحصیلی
+    try {
+      const [allPrograms] = await db.query(`
+        SELECT id, name
+        FROM qacom_wp_apply_programs
+        WHERE status = 'publish'
+        ORDER BY name ASC
+      `);
+      
+      // حذف آیتم‌های تکراری با ID یکسان
+      const uniquePrograms = [];
+      const seenIds = new Set();
+      
+      for (const program of allPrograms) {
+        if (!seenIds.has(program.id)) {
+          uniquePrograms.push({
+            id: String(program.id),  // تبدیل به رشته
+            name: program.name
+          });
+          seenIds.add(program.id);
+        } else {
+          console.log(`Duplicate program ID found: ${program.id}, name: ${program.name}`);
+        }
+      }
+      
+      destinationData.availableFields = uniquePrograms.map(program => ({
+        id: program.id,
+        name: program.name
+      }));
+      
+      // اگر program انتخاب شده در لیست نباشد، آن را اضافه کنیم
+      if (metaData.application_program && destinationData.field) {
+        const programId = String(metaData.application_program);  // تبدیل به رشته
+        const selectedFieldExists = destinationData.availableFields.some(
+          field => field.id === programId
+        );
+        
+        if (!selectedFieldExists && destinationData.field.id) {
+          // اضافه کردن به اول لیست تا به راحتی قابل مشاهده باشد
+          destinationData.availableFields.unshift({
+            id: String(destinationData.field.id),  // تبدیل به رشته
+            name: destinationData.field.name || "Selected Program"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching all programs:', error);
+      destinationData.availableFields = [];
+      
+      // اگر برنامه‌ها بارگیری نشدند ولی یک برنامه انتخاب شده داریم، آن را به عنوان تنها گزینه قرار دهیم
+      if (destinationData.field && destinationData.field.id) {
+        destinationData.availableFields = [{
+          id: String(destinationData.field.id),  // تبدیل به رشته
+          name: destinationData.field.name || "Selected Program"
+        }];
+      }
+    }
+    
+    // پردازش داده‌های زبان انگلیسی
+    let languageData = {
+      test: "",
+      score: ""
+    };
+    
+    if (metaData.application_english_test) {
+      languageData.test = metaData.application_english_test;
+      
+      // اگر تست انتخاب شده نیاز به نمره دارد و نمره وجود دارد
+      if (metaData.application_english_test !== "I don't have this" && 
+          metaData.application_english_test !== "Not yet, but I will in the future" &&
+          metaData.application_english_score) {
+        languageData.score = metaData.application_english_score;
+      }
+    }
+    
+    // پردازش داده‌های آزمون‌های استاندارد
+    let testsData = {
+      type: "",
+      scores: {}
+    };
+    
+    // بررسی داده‌های GRE
+    const hasGreData = metaData.application_gre_total || metaData.application_gre_verbal || 
+                        metaData.application_gre_quantitative || metaData.application_gre_writing;
+    
+    if (hasGreData) {
+      testsData.type = "gre";
+      testsData.scores.gre = {
+        total: metaData.application_gre_total || "",
+        verbal: metaData.application_gre_verbal || "",
+        quantitative: metaData.application_gre_quantitative || "",
+        writing: metaData.application_gre_writing || ""
+      };
+    }
+    
+    // بررسی داده‌های GMAT
+    const hasGmatData = metaData.application_gmat_total || metaData.application_gmat_verbal || 
+                         metaData.application_gmat_quantitative || metaData.application_gmat_writing;
+    
+    if (hasGmatData) {
+      if (!testsData.type) {
+        testsData.type = "gmat";
+      }
+      testsData.scores.gmat = {
+        total: metaData.application_gmat_total || "",
+        verbal: metaData.application_gmat_verbal || "",
+        quantitative: metaData.application_gmat_quantitative || "",
+        writing: metaData.application_gmat_writing || ""
+      };
+    }
+    
+    // بررسی داده‌های LSAT
+    if (metaData.application_lsat_total) {
+      if (!testsData.type) {
+        testsData.type = "lsat";
+      }
+      testsData.scores.lsat = {
+        total: metaData.application_lsat_total || ""
+      };
+    }
+    
+    const formData = {
+      citizenship: {
+        country: citizenship ? {
+          code: citizenship,
+          name: countryCodeToName[citizenship] || ''
+        } : '',
+        residence: currentCountry ? {
+          code: currentCountry,
+          name: countryCodeToName[currentCountry] || ''
+        } : ''
+      },
+      education: educationData,
+      goals: destinationData,
+      language: languageData,
+      tests: testsData
+    };
+
+    res.json(formData);
+  } catch (error) {
+    console.error('Error fetching user profile form data:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint For Profile Form Update 
+app.post('/api/user/profile-form', authenticateToken, async (req, res) => {
+  const { email } = req.user;
+  const { citizenship, education, goals, language, tests } = req.body;
+
+  try {
+    // دریافت آیدی کاربر
+    const [users] = await db.query(`
+      SELECT ID
+      FROM qacom_wp_users
+      WHERE user_email = ?`, [email]);
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = users[0].ID;
+
+    // بروزرسانی یا ایجاد متا برای citizenship (فقط کد کشور ذخیره می‌شود)
+    if (citizenship?.country?.code) {
+      // First check if the meta already exists
+      const [existingCitizenMeta] = await db.query(`
+        SELECT umeta_id 
+        FROM qacom_wp_usermeta 
+        WHERE user_id = ? AND meta_key = 'citizen'
+      `, [userId]);
+      
+      if (existingCitizenMeta && existingCitizenMeta.length > 0) {
+        // Update existing meta
+        await db.query(`
+          UPDATE qacom_wp_usermeta 
+          SET meta_value = ? 
+          WHERE user_id = ? AND meta_key = 'citizen'
+        `, [citizenship.country.code, userId]);
+      } else {
+        // Insert new meta
+        await db.query(`
+          INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+          VALUES (?, 'citizen', ?)
+        `, [userId, citizenship.country.code]);
+      }
+    }
+
+    // بروزرسانی یا ایجاد متا برای currentCountry/residence (فقط کد کشور ذخیره می‌شود)
+    if (citizenship?.residence?.code) {
+      // First check if the meta already exists
+      const [existingCountryMeta] = await db.query(`
+        SELECT umeta_id 
+        FROM qacom_wp_usermeta 
+        WHERE user_id = ? AND meta_key = 'country'
+      `, [userId]);
+      
+      if (existingCountryMeta && existingCountryMeta.length > 0) {
+        // Update existing meta
+        await db.query(`
+          UPDATE qacom_wp_usermeta 
+          SET meta_value = ? 
+          WHERE user_id = ? AND meta_key = 'country'
+        `, [citizenship.residence.code, userId]);
+      } else {
+        // Insert new meta
+        await db.query(`
+          INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+          VALUES (?, 'country', ?)
+        `, [userId, citizenship.residence.code]);
+      }
+    }
+
+    // بروزرسانی یا ایجاد متا برای اطلاعات آموزشی
+    if (education) {
+      // ابتدا متا فعلی را دریافت کنیم
+      const [existingEducationMeta] = await db.query(`
+        SELECT meta_value 
+        FROM qacom_wp_usermeta 
+        WHERE user_id = ? AND meta_key = 'profile_education'
+      `, [userId]);
+
+      let updatedEducationData = null;
+
+      if (existingEducationMeta && existingEducationMeta.length > 0 && existingEducationMeta[0].meta_value) {
+        try {
+          // تلاش برای پردازش داده‌های موجود
+          const rawEducationData = existingEducationMeta[0].meta_value.replace(/^s:\d+:"(.*)"$/, '$1');
+          
+          // تبدیل فرمت درجه به فرمت ذخیره شده در دیتابیس
+          let degree = education.degree;
+          if (degree === "Master's Degree") {
+            degree = "Master";
+          } else if (degree === "Bachelor's Degree") {
+            degree = "Bachelor";
+          } else if (degree === "Doctoral Degree") {
+            degree = "Ph.D.";
+          }
+          
+          // حفظ ساختار اصلی متا و فقط به‌روزرسانی رکورد اول
+          // استخراج بخش‌های مختلف داده‌ها
+          
+          // به‌روزرسانی level
+          let updatedRawData = rawEducationData.replace(
+            /s:5:"level";a:\d+:{i:0;s:\d+:"[^"]*"/, 
+            `s:5:"level";a:2:{i:0;s:${degree.length}:"${degree}"`
+          );
+          
+          // به‌روزرسانی university
+          updatedRawData = updatedRawData.replace(
+            /s:10:"university";a:\d+:{i:0;s:\d+:"[^"]*"/, 
+            `s:10:"university";a:2:{i:0;s:${education.university.length}:"${education.university}"`
+          );
+          
+          // به‌روزرسانی program (major)
+          updatedRawData = updatedRawData.replace(
+            /s:7:"program";a:\d+:{i:0;s:\d+:"[^"]*"/, 
+            `s:7:"program";a:2:{i:0;s:${education.major.length}:"${education.major}"`
+          );
+          
+          // به‌روزرسانی gpa
+          updatedRawData = updatedRawData.replace(
+            /s:3:"gpa";a:\d+:{i:0;s:\d+:"[^"]*"/, 
+            `s:3:"gpa";a:2:{i:0;s:${education.gpa.length}:"${education.gpa}"`
+          );
+          
+          // سریالایز کردن دوباره مانند PHP
+          updatedEducationData = `s:${updatedRawData.length}:"${updatedRawData}";`;
+          
+        } catch (error) {
+          console.error('Error updating existing education data:', error);
+          // در صورت خطا، متا را تغییر نمی‌دهیم
+          updatedEducationData = existingEducationMeta[0].meta_value;
+        }
+      } else {
+        // اگر متا قبلی وجود ندارد، یک ساختار جدید ایجاد می‌کنیم
+        // تبدیل فرمت درجه به فرمت ذخیره شده در دیتابیس
+        let degree = education.degree;
+        if (degree === "Master's Degree") {
+          degree = "Master";
+        } else if (degree === "Bachelor's Degree") {
+          degree = "Bachelor";
+        } else if (degree === "Doctoral Degree") {
+          degree = "Ph.D.";
+        }
+        
+        // ایجاد ساختار سریالایز شده PHP برای متا education
+        const serializedData = `a:7:{s:7:"country";a:1:{i:0;s:2:"US";}s:10:"university";a:1:{i:0;s:${education.university.length}:"${education.university}";}s:5:"level";a:1:{i:0;s:${degree.length}:"${degree}";}s:7:"program";a:1:{i:0;s:${education.major.length}:"${education.major}";}s:3:"gpa";a:1:{i:0;s:${education.gpa.length}:"${education.gpa}";}s:10:"start_date";a:1:{i:0;s:7:"2020-01";}s:8:"end_date";a:1:{i:0;s:7:"2024-01";}}`;
+        
+        // سریالایز کردن دوباره مانند PHP
+        updatedEducationData = `s:${serializedData.length}:"${serializedData}";`;
+      }
+      
+      // ذخیره متا education به‌روزرسانی شده
+      const [existingProfileEducationMeta] = await db.query(`
+        SELECT umeta_id 
+        FROM qacom_wp_usermeta 
+        WHERE user_id = ? AND meta_key = 'profile_education'
+      `, [userId]);
+      
+      if (existingProfileEducationMeta && existingProfileEducationMeta.length > 0) {
+        // Update existing meta
+        await db.query(`
+          UPDATE qacom_wp_usermeta 
+          SET meta_value = ? 
+          WHERE user_id = ? AND meta_key = 'profile_education'
+        `, [updatedEducationData, userId]);
+      } else {
+        // Insert new meta
+        await db.query(`
+          INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+          VALUES (?, 'profile_education', ?)
+        `, [userId, updatedEducationData]);
+      }
+    }
+
+    // بروزرسانی یا ایجاد متا برای اطلاعات مقصد تحصیلی (destination)
+    if (goals) {
+      // بروزرسانی کشور مقصد
+      if (goals.country && goals.country.id) {
+        // Check if meta exists
+        const [existingCountryMeta] = await db.query(`
+          SELECT umeta_id 
+          FROM qacom_wp_usermeta 
+          WHERE user_id = ? AND meta_key = 'application_country'
+        `, [userId]);
+        
+        if (existingCountryMeta && existingCountryMeta.length > 0) {
+          // Update existing meta
+          await db.query(`
+            UPDATE qacom_wp_usermeta 
+            SET meta_value = ? 
+            WHERE user_id = ? AND meta_key = 'application_country'
+          `, [goals.country.id, userId]);
+        } else {
+          // Insert new meta
+          await db.query(`
+            INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+            VALUES (?, 'application_country', ?)
+          `, [userId, goals.country.id]);
+        }
+      }
+      
+      // بروزرسانی سطح تحصیلی
+      if (goals.level) {
+        // تبدیل فرمت UI به فرمت دیتابیس
+        let dbLevel = goals.level;
+        
+        if (dbLevel === "PhD") {
+          dbLevel = "Ph.D.";
+        } else if (dbLevel === "Master's Degree") {
+          dbLevel = "Master";
+        } else if (dbLevel === "Bachelor's Degree") {
+          dbLevel = "Bachelor";
+        }
+        
+        
+        // Check if meta exists
+        const [existingLevelMeta] = await db.query(`
+          SELECT umeta_id 
+          FROM qacom_wp_usermeta 
+          WHERE user_id = ? AND meta_key = 'application_level'
+        `, [userId]);
+        
+        if (existingLevelMeta && existingLevelMeta.length > 0) {
+          // Update existing meta
+          await db.query(`
+            UPDATE qacom_wp_usermeta 
+            SET meta_value = ? 
+            WHERE user_id = ? AND meta_key = 'application_level'
+          `, [dbLevel, userId]);
+        } else {
+          // Insert new meta
+          await db.query(`
+            INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+            VALUES (?, 'application_level', ?)
+          `, [userId, dbLevel]);
+        }
+      }
+      
+      // بروزرسانی رشته تحصیلی
+      if (goals.field && goals.field.id) {
+        // Check if meta exists
+        const [existingProgramMeta] = await db.query(`
+          SELECT umeta_id 
+          FROM qacom_wp_usermeta 
+          WHERE user_id = ? AND meta_key = 'application_program'
+        `, [userId]);
+        
+        if (existingProgramMeta && existingProgramMeta.length > 0) {
+          // Update existing meta
+          await db.query(`
+            UPDATE qacom_wp_usermeta 
+            SET meta_value = ? 
+            WHERE user_id = ? AND meta_key = 'application_program'
+          `, [goals.field.id, userId]);
+        } else {
+          // Insert new meta
+          await db.query(`
+            INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+            VALUES (?, 'application_program', ?)
+          `, [userId, goals.field.id]);
+        }
+      }
+    }
+
+    // بروزرسانی یا ایجاد متا برای اطلاعات زبان انگلیسی
+    if (language) {
+      // بروزرسانی نوع تست زبان انگلیسی
+      if (language.test) {
+        // Check if meta exists
+        const [existingTestMeta] = await db.query(`
+          SELECT umeta_id 
+          FROM qacom_wp_usermeta 
+          WHERE user_id = ? AND meta_key = 'application_english_test'
+        `, [userId]);
+        
+        if (existingTestMeta && existingTestMeta.length > 0) {
+          // Update existing meta
+          await db.query(`
+            UPDATE qacom_wp_usermeta 
+            SET meta_value = ? 
+            WHERE user_id = ? AND meta_key = 'application_english_test'
+          `, [language.test, userId]);
+        } else {
+          // Insert new meta
+          await db.query(`
+            INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+            VALUES (?, 'application_english_test', ?)
+          `, [userId, language.test]);
+        }
+        
+        // بروزرسانی نمره تست زبان انگلیسی (فقط اگر تست نیاز به نمره داشته باشد)
+        if (language.test !== "I don't have this" && 
+            language.test !== "Not yet, but I will in the future" && 
+            language.score && language.score !== "N/A") {
+          
+          // Check if meta exists
+          const [existingScoreMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_english_score'
+          `, [userId]);
+          
+          if (existingScoreMeta && existingScoreMeta.length > 0) {
+            // Update existing meta
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_english_score'
+            `, [language.score, userId]);
+          } else {
+            // Insert new meta
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_english_score', ?)
+            `, [userId, language.score]);
+          }
+        } else if ((language.test === "I don't have this" || 
+                  language.test === "Not yet, but I will in the future")) {
+          
+          // اگر کاربر گزینه "I don't have this" یا "Not yet, but I will in the future" را انتخاب کرده،
+          // بررسی می‌کنیم آیا متای نمره وجود دارد و اگر وجود دارد آن را حذف می‌کنیم
+          
+          const [existingScoreMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_english_score'
+          `, [userId]);
+          
+          if (existingScoreMeta && existingScoreMeta.length > 0) {
+            // Delete existing meta
+            await db.query(`
+              DELETE FROM qacom_wp_usermeta 
+              WHERE user_id = ? AND meta_key = 'application_english_score'
+            `, [userId]);
+          }
+        }
+      }
+    }
+
+    // بروزرسانی یا ایجاد متا برای اطلاعات آزمون‌های استاندارد
+    if (tests) {
+      // ذخیره نمرات GRE
+      if (tests.scores?.gre) {
+        // GRE Total
+        if (tests.scores.gre.total) {
+          const [existingGreTotalMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gre_total'
+          `, [userId]);
+          
+          if (existingGreTotalMeta && existingGreTotalMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gre_total'
+            `, [tests.scores.gre.total, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gre_total', ?)
+            `, [userId, tests.scores.gre.total]);
+          }
+        }
+        
+        // GRE Verbal
+        if (tests.scores.gre.verbal) {
+          const [existingGreVerbalMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gre_verbal'
+          `, [userId]);
+          
+          if (existingGreVerbalMeta && existingGreVerbalMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gre_verbal'
+            `, [tests.scores.gre.verbal, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gre_verbal', ?)
+            `, [userId, tests.scores.gre.verbal]);
+          }
+        }
+        
+        // GRE Quantitative
+        if (tests.scores.gre.quantitative) {
+          const [existingGreQuantMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gre_quantitative'
+          `, [userId]);
+          
+          if (existingGreQuantMeta && existingGreQuantMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gre_quantitative'
+            `, [tests.scores.gre.quantitative, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gre_quantitative', ?)
+            `, [userId, tests.scores.gre.quantitative]);
+          }
+        }
+        
+        // GRE Writing
+        if (tests.scores.gre.writing) {
+          const [existingGreWritingMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gre_writing'
+          `, [userId]);
+          
+          if (existingGreWritingMeta && existingGreWritingMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gre_writing'
+            `, [tests.scores.gre.writing, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gre_writing', ?)
+            `, [userId, tests.scores.gre.writing]);
+          }
+        }
+      }
+      
+      // ذخیره نمرات GMAT
+      if (tests.scores?.gmat) {
+        // GMAT Total
+        if (tests.scores.gmat.total) {
+          const [existingGmatTotalMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gmat_total'
+          `, [userId]);
+          
+          if (existingGmatTotalMeta && existingGmatTotalMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gmat_total'
+            `, [tests.scores.gmat.total, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gmat_total', ?)
+            `, [userId, tests.scores.gmat.total]);
+          }
+        }
+        
+        // GMAT Verbal
+        if (tests.scores.gmat.verbal) {
+          const [existingGmatVerbalMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gmat_verbal'
+          `, [userId]);
+          
+          if (existingGmatVerbalMeta && existingGmatVerbalMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gmat_verbal'
+            `, [tests.scores.gmat.verbal, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gmat_verbal', ?)
+            `, [userId, tests.scores.gmat.verbal]);
+          }
+        }
+        
+        // GMAT Quantitative
+        if (tests.scores.gmat.quantitative) {
+          const [existingGmatQuantMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gmat_quantitative'
+          `, [userId]);
+          
+          if (existingGmatQuantMeta && existingGmatQuantMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gmat_quantitative'
+            `, [tests.scores.gmat.quantitative, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gmat_quantitative', ?)
+            `, [userId, tests.scores.gmat.quantitative]);
+          }
+        }
+        
+        // GMAT Writing
+        if (tests.scores.gmat.writing) {
+          const [existingGmatWritingMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_gmat_writing'
+          `, [userId]);
+          
+          if (existingGmatWritingMeta && existingGmatWritingMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_gmat_writing'
+            `, [tests.scores.gmat.writing, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_gmat_writing', ?)
+            `, [userId, tests.scores.gmat.writing]);
+          }
+        }
+      }
+      
+      // ذخیره نمرات LSAT
+      if (tests.scores?.lsat) {
+        // LSAT Total
+        if (tests.scores.lsat.total) {
+          const [existingLsatTotalMeta] = await db.query(`
+            SELECT umeta_id 
+            FROM qacom_wp_usermeta 
+            WHERE user_id = ? AND meta_key = 'application_lsat_total'
+          `, [userId]);
+          
+          if (existingLsatTotalMeta && existingLsatTotalMeta.length > 0) {
+            await db.query(`
+              UPDATE qacom_wp_usermeta 
+              SET meta_value = ? 
+              WHERE user_id = ? AND meta_key = 'application_lsat_total'
+            `, [tests.scores.lsat.total, userId]);
+          } else {
+            await db.query(`
+              INSERT INTO qacom_wp_usermeta (user_id, meta_key, meta_value)
+              VALUES (?, 'application_lsat_total', ?)
+            `, [userId, tests.scores.lsat.total]);
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'Profile data updated successfully' });
+  } catch (error) {
+    console.error('Error updating user profile form data:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint for program details
+app.get('/api/program/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First try to get program with its category
+    const [programData] = await db.query(`
+      SELECT p.id, p.name, p.category_id, t.name as category_name
+      FROM qacom_wp_apply_programs p
+      LEFT JOIN qacom_wp_terms t ON p.category_id = t.term_id
+      WHERE p.id = ?
+      LIMIT 1
+    `, [id]);
+
+    if (!programData || programData.length === 0) {
+      // If not found with direct join, try using term_relationships
+      const [basicProgramData] = await db.query(`
+        SELECT id, name
+        FROM qacom_wp_apply_programs
+        WHERE id = ?
+        LIMIT 1
+      `, [id]);
+      
+      if (!basicProgramData || basicProgramData.length === 0) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+      
+      const program = basicProgramData[0];
+      
+      // Try to find the category using term_relationships
+      const [categoryData] = await db.query(`
+        SELECT tt.term_id, t.name
+        FROM qacom_wp_term_relationships tr
+        JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+        JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+        WHERE tr.object_id = ? AND tt.taxonomy = 'program_category'
+        LIMIT 1
+      `, [id]);
+      
+      if (categoryData && categoryData.length > 0) {
+        return res.json({
+          id: program.id,
+          name: decodeHtmlEntities(program.name),
+          category: {
+            id: categoryData[0].term_id,
+            name: decodeHtmlEntities(categoryData[0].name)
+          }
+        });
+      }
+      
+      // Return program without category if category not found
+      return res.json({
+        id: program.id,
+        name: decodeHtmlEntities(program.name)
+      });
+    }
+
+    // Return program with category
+    const program = programData[0];
+    return res.json({
+      id: program.id,
+      name: decodeHtmlEntities(program.name),
+      category: program.category_id ? {
+        id: program.category_id,
+        name: decodeHtmlEntities(program.category_name)
+      } : null
+    });
+  } catch (error) {
+    console.error('Error fetching program:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// API endpoint for programs by area of study
+app.get('/api/programs', authenticateToken, async (req, res) => {
+  try {
+    const { areaOfStudy } = req.query;
+    
+    if (!areaOfStudy) {
+      return res.status(400).json({ error: 'Area of study ID is required' });
+    }
+
+    // Get all programs related to the selected area of study
+    const [programsData] = await db.query(`
+      SELECT p.id, p.name
+      FROM qacom_wp_apply_programs p
+      JOIN qacom_wp_term_relationships tr ON p.id = tr.object_id
+      JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+      WHERE tt.taxonomy = 'program_category' AND tt.term_id = ?
+      ORDER BY p.name ASC
+    `, [areaOfStudy]);
+
+    if (!programsData || programsData.length === 0) {
+      // Try an alternative approach if the direct relationship fails
+      const [altProgramsData] = await db.query(`
+        SELECT p.id, p.name
+        FROM qacom_wp_apply_programs p
+        WHERE p.category_id = ?
+        ORDER BY p.name ASC
+      `, [areaOfStudy]);
+      
+      if (!altProgramsData || altProgramsData.length === 0) {
+        return res.status(404).json({ error: 'No programs found for this area of study' });
+      }
+      
+      const programs = altProgramsData.map(program => ({
+        id: program.id,
+        name: decodeHtmlEntities(program.name)
+      }));
+      
+      return res.json({ programs });
+    }
+
+    const programs = programsData.map(program => ({
+      id: program.id,
+      name: decodeHtmlEntities(program.name)
+    }));
+
+    res.json({ programs });
+  } catch (error) {
+    console.error('Error fetching programs by area of study:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

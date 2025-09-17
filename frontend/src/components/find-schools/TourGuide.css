@@ -1,0 +1,86 @@
+
+/* Tour guide element highlighting styles */
+[data-tour-active-element="country"] .filter-dropdown[data-label="Country"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="state"] .filter-dropdown[data-label="State"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="school"] .filter-dropdown[data-label="School"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="degreeLevel"] .filter-dropdown[data-label="Degree Level"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="areaOfStudy"] .filter-dropdown[data-label="Area of Study"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="program"] .filter-dropdown[data-label="Program"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="orderBy"] .filter-dropdown[data-label="Order By"] {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="schoolCard"] .school-card {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="favorite"] .favorite-button {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="details"] .details-button {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+[data-tour-active-element="compare"] .compare-button {
+  animation: highlight-pulse 1.5s infinite;
+  position: relative;
+  z-index: 20;
+}
+
+/* Additional styling for the tour guide component */
+.tour-popup {
+  backdrop-filter: blur(8px);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.7);
+  }
+}
+
+.tour-progress-bar {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
+  transition: width 0.3s ease-in-out;
+}
