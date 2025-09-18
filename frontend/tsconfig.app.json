@@ -20,8 +20,8 @@
     "noFallthroughCasesInSwitch": false,
 
     "baseUrl": ".",
-    "paths": { "@/*": ["frontend/src/*"] },
+    "paths": { "@/*": ["src/*"] },
     "types": ["vite/client"]
   },
-  "include": ["frontend/src", "frontend/vite-env.d.ts"]
+  "include": ["src", "vite-env.d.ts"]
 }

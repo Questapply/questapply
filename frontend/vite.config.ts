@@ -1,24 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+import { fileURLToPath, URL } from "node:url";
 
-// https://vitejs.dev/config/
 export default defineConfig({
+  plugins: [react()],
   server: {
-    host: "::",
-    port: 8080,
-    proxy: {
-      "/api": {
-        target: "http://localhost:5000",
-        changeOrigin: true,
-        secure: false,
-      },
+    host: "localhost", // یا 0.0.0.0
+    port: 8080, // اگر 8080 می‌خواهی
+    proxy: { "/api": { target: "http://localhost:5000", changeOrigin: true } },
+  },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)), // ← مهم
     },
   },
-  plugins: [react()],
-  resolve: { alias: { "@": path.resolve(__dirname, "frontend/src") } },
-  build: { outDir: "dist" }, // خروجی داخل frontend/dist
 });
 ////////////////////////////
 // import { defineConfig } from "vite";
