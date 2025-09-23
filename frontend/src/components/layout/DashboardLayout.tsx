@@ -65,25 +65,19 @@ const DashboardLayout = ({
           } p-4 sticky top-0 z-10`}
         >
           <div className="flex justify-between items-center">
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
               <button
-                className={`md:hidden ${
-                  isDarkMode ? "text-gray-200" : "text-gray-700"
-                } mr-4`}
-                onClick={() => setSidebarOpen(!sidebarOpen)}
+                onClick={() => setSidebarOpen(true)}
+                className="p-2  rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+                aria-label="Open sidebar"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
+                <svg viewBox="0 0 24 24" className="w-6 h-6">
                   <path
+                    fill="currentColor"
+                    d="M3 6h18M3 12h18M3 18h18"
+                    stroke="currentColor"
+                    strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16M4 18h16"
                   />
                 </svg>
               </button>
@@ -146,8 +140,8 @@ const DashboardLayout = ({
         </nav>
 
         {/* Main Content Container */}
-        <div className="px-4 md:px-8 py-6 flex-1">
-          <div className="max-w-7xl mx-auto">{children}</div>
+        <div className="px-4  py-6 flex-1">
+          <div className="w-full">{children}</div>
         </div>
       </div>
     </div>

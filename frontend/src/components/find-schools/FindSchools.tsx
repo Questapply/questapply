@@ -819,20 +819,6 @@ const FindSchools = () => {
   // ---------------------- UI: Chat JSX ----------------------
   const chatComponent = (
     <>
-      {/* Chat Header */}
-      {/* <div className="border-b px-4 py-3 rounded-t-lg border-border bg-muted/50 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">AI</span>
-          </div>
-          <div>
-            <h3 className="font-semibold">QuestApply Assistant</h3>
-            <p className="text-xs text-muted-foreground">
-              Ask me anything about universities
-            </p>
-          </div>
-        </div>
-      </div> */}
       <ChatHeader
         sessions={sessions}
         currentSessionId={sessionId}
@@ -916,23 +902,6 @@ const FindSchools = () => {
           )}
         </motion.div>
       </div>
-
-      {/* Search */}
-      <form onSubmit={handleSearch} className="mb-4">
-        <div className="relative">
-          <Input
-            type="text"
-            placeholder="Search schools..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2"
-            size={18}
-          />
-        </div>
-      </form>
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-4 mb-6">
@@ -1078,7 +1047,7 @@ const FindSchools = () => {
         </div>
       </div>
 
-      {/* Dual Pane: چت (چپ) + نتایج (راست) */}
+      {/* Dual Pane*/}
       <DualPaneLayout
         chat={chatComponent}
         results={[
@@ -1086,12 +1055,12 @@ const FindSchools = () => {
             key="results-main"
             // اختیاری:
             // title="Results"
-            padded
+            padded={false}
+            className="p-0"
             emptyState={
               <div className="text-muted-foreground">No results to display</div>
             }
           >
-            {/* ⬇️ همون JSX نتایج فعلی شما، بدون هیچ تغییری */}
             {noSchoolsFound && schools.length === 0 && (
               <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
@@ -1146,7 +1115,6 @@ const FindSchools = () => {
                 </div>
               )
             )}
-            {/* ⬆️ پایان همان JSX نتایج شما */}
           </ResultsColumn>,
         ]}
         layout={{
@@ -1158,14 +1126,13 @@ const FindSchools = () => {
           stickyChat: false,
         }}
         resultsGrid={{
-          minCardWidth: 380,
+          minCardWidth: 280,
           gap: "6",
           fill: "auto-fit",
           densePacking: true,
           equalizeCardHeight: true,
           distributeCardWhitespace: true,
         }}
-        // resultsGrid اختیاریه؛ اینجا نتایج به صورت لیست هست، می‌تونیم نذاریمش
       />
     </div>
   );

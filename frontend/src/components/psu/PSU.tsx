@@ -780,7 +780,7 @@ function computeRoadmapStatuses({
 }
 
 function PSU() {
-  const { relId } = useParams();
+  const { relId } = useParams<{ relId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const token = useMemo(() => localStorage.getItem("token") || "", []);

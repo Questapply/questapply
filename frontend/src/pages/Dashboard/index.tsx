@@ -17,6 +17,7 @@ export default function Dashboard({ isDarkMode, toggleTheme }: Props) {
     >
       <div className="w-full max-w-full">
         {/* نوار تب‌ها */}
+
         <NavigationButtons isDarkMode={isDarkMode} />
 
         {/* محتوای صفحه‌های تب (FindSchools, FindPrograms, ...) */}

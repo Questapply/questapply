@@ -36,11 +36,7 @@ const ChatComposer = ({
   };
 
   return (
-    <div
-      className={`border-t p-4 ${
-        isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-white"
-      }`}
-    >
+    <div className="border-t p-4 dark:border-gray-700  dark:bg-gray-800 border-gray-200 bg-white">
       <form onSubmit={handleSubmit} className="flex items-end gap-3">
         <div className="flex-1">
           <textarea
@@ -49,11 +45,11 @@ const ChatComposer = ({
             onKeyPress={handleKeyPress}
             placeholder={placeholder}
             disabled={disabled || isLoading}
-            className={`w-full resize-none rounded-lg border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all duration-200 ${
-              isDarkMode
-                ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400 focus:ring-teal-500 focus:border-teal-500"
-                : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-teal-500 focus:border-teal-500"
-            } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`w-full resize-none rounded-lg border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all duration-200 
+             
+                 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400 dark:focus:ring-teal-500 dark:focus:border-teal-500
+                 bg-white  border-gray-300 text-gray-900 placeholder-gray-500 focus:ring-teal-500 focus:border-teal-500"
+           ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             rows={1}
             style={{
               minHeight: "44px",
@@ -86,34 +82,6 @@ const ChatComposer = ({
           </Button>
         </motion.div>
       </form>
-
-      <div
-        className={`text-xs mt-2 ${
-          isDarkMode ? "text-gray-400" : "text-gray-500"
-        }`}
-      >
-        Press{" "}
-        <kbd
-          className={`px-1 py-0.5 rounded text-xs ${
-            isDarkMode
-              ? "bg-gray-700 border border-gray-600"
-              : "bg-gray-100 border border-gray-300"
-          }`}
-        >
-          Enter
-        </kbd>{" "}
-        to send,{" "}
-        <kbd
-          className={`px-1 py-0.5 rounded text-xs ${
-            isDarkMode
-              ? "bg-gray-700 border border-gray-600"
-              : "bg-gray-100 border border-gray-300"
-          }`}
-        >
-          Shift + Enter
-        </kbd>{" "}
-        for new line
-      </div>
     </div>
   );
 };

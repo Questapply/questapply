@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 
 interface SchoolBasicInfoProps {
   name: string;
@@ -18,55 +18,76 @@ const SchoolBasicInfo = ({
   toggleFavorite,
 }: SchoolBasicInfoProps) => {
   return (
-    <div className="flex items-center gap-4">
-      <motion.div whileHover={{ rotate: 5 }} transition={{ duration: 0.2 }}>
+    <div className="flex items-start gap-3 md:gap-4 min-w-0">
+      {/* لوگو: موبایل کوچک‌تر */}
+      <motion.div
+        whileHover={{ rotate: 5 }}
+        transition={{ duration: 0.2 }}
+        className="shrink-0"
+      >
         <img
-          src={logo || "/placeholder.svg"}
+          src={logo}
           alt={`${name} logo`}
-          className="w-20 h-20 object-contain bg-gray-100 dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700"
-          onError={(e) => {
-            e.currentTarget.src = "/placeholder.svg";
-          }}
+          className="w-12 h-12 md:w-16 md:h-16 object-contain bg-gray-100 dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700"
         />
       </motion.div>
 
-      <div>
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+      {/* متن‌ها */}
+      <div className="min-w-0">
+        <h3
+          className="text-base md:text-xl font-semibold text-gray-900 dark:text-white truncate"
+          title={name}
+        >
           {name}
         </h3>
-        <p className="text-gray-600 dark:text-gray-400 text-sm">{location}</p>
-        <div className="flex gap-2 mt-2">
+        <p
+          className="text-xs md:text-sm text-gray-600 dark:text-gray-400 truncate"
+          title={location}
+        >
+          {location}
+        </p>
+
+        {/* اکشن‌ها: روی موبایل جمع‌وجور و wrap */}
+        <div className="flex flex-wrap items-center gap-2 mt-2">
           <Button
             variant="outline"
             size="sm"
-            className="text-purple-600 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+            className="h-8 px-2 text-xs md:h-9 md:px-3 md:text-sm
+                       text-purple-600 border-purple-300 dark:border-purple-700
+                       hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
           >
             School Details
           </Button>
+
           <motion.button
-            className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+            type="button"
             onClick={toggleFavorite}
             aria-label={
               isFavorite ? "Remove from favorites" : "Add to favorites"
             }
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.94 }}
+            className="h-8 w-8 md:h-9 md:w-9 rounded-md border border-border
+                       text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400
+                       flex items-center justify-center transition-colors"
           >
             {isFavorite ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 fill-red-500"
+                className="h-5 w-5 md:h-6 md:w-6 fill-red-500"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
               </svg>
             ) : (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
+                className="h-5 w-5 md:h-6 md:w-6"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"

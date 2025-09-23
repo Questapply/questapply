@@ -1,187 +1,3 @@
-// import { useState, useEffect } from "react";
-// import { Button } from "@/components/ui/button"; // Button might not be directly used in parent, but good to keep if it's generally useful
-// import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-// import { motion } from "framer-motion";
-// import {
-//   BookOpen,
-//   FileText,
-//   Image,
-//   Wand,
-//   University,
-//   Trophy,
-//   FileSearch,
-// } from "lucide-react";
-// import { useSearchParams } from "react-router-dom";
-// import ResumeGuidance from "@/components/dashboard/sections/resume/ResumeGuidance";
-// import ResumeTemplates from "@/components/dashboard/sections/resume/ResumeTemplates";
-// import MyResumes from "@/components/dashboard/sections/resume/MyResumes";
-// import AiImprovement from "@/components/dashboard/sections/resume/AiImprovement";
-// import UniversityMatch from "@/components/dashboard/sections/resume/UniversityMatch";
-// import SuccessStories from "@/components/dashboard/sections/resume/SuccessStories";
-// import AtsAnalysis from "@/components/dashboard/sections/resume/AtsAnalysis";
-
-// const resumeTabs = [
-//   { id: "guidance", name: "Guidance", icon: <BookOpen className="w-4 h-4" /> },
-//   {
-//     id: "template",
-//     name: "Choose Template",
-//     icon: <Image className="w-4 h-4" />,
-//   },
-//   {
-//     id: "myResumes",
-//     name: "My Resumes",
-//     icon: <FileText className="w-4 h-4" />,
-//   },
-//   {
-//     id: "aiImprovement",
-//     name: "AI Improvement",
-//     icon: <Wand className="w-4 h-4" />,
-//   },
-//   {
-//     id: "universityMatch",
-//     name: "Match with University",
-//     icon: <University className="w-4 h-4" />,
-//   },
-//   {
-//     id: "successStories",
-//     name: "Success Stories",
-//     icon: <Trophy className="w-4 h-4" />,
-//   },
-//   {
-//     id: "atsAnalysis",
-//     name: "ATS Analysis",
-//     icon: <FileSearch className="w-4 h-4" />,
-//   },
-// ];
-
-// const CreateResume = () => {
-//   const [searchParams] = useSearchParams();
-//   const initialTab = searchParams.get("tab") || "guidance";
-//   const [activeTab, setActiveTab] = useState(initialTab);
-//   const [selectedTemplateIdForCreation, setSelectedTemplateIdForCreation] =
-//     useState<number | null>(null);
-//   const [selectedTemplateNameForCreation, setSelectedTemplateNameForCreation] =
-//     useState<string | null>(null);
-
-//   // Update active tab based on URL params
-//   useEffect(() => {
-//     const tabFromParams = searchParams.get("tab");
-//     if (tabFromParams && resumeTabs.some((tab) => tab.id === tabFromParams)) {
-//       setActiveTab(tabFromParams);
-//     }
-//   }, [searchParams]);
-
-//   // Handler for when a template is selected in the ResumeTemplates component
-//   const handleTemplateSelection = (
-//     templateId: number,
-//     templateName: string
-//   ) => {
-//     setSelectedTemplateIdForCreation(templateId);
-//     setSelectedTemplateNameForCreation(templateName);
-//     // Change to "myResumes" tab
-//     setActiveTab("myResumes");
-//     // Clear the selected template data after navigating, so it doesn't re-trigger
-//     // if MyResumes re-renders for other reasons later.
-//     // MyResumes will take care of initializing the new resume from these props.
-//     // A small timeout ensures MyResumes gets the props before they are cleared.
-//     setTimeout(() => {
-//       setSelectedTemplateIdForCreation(null);
-//       setSelectedTemplateNameForCreation(null);
-//     }, 50); // Small delay to ensure the effect in MyResumes runs first
-//   };
-
-//   // New handler to navigate to the "Choose Template" tab
-//   const handleNavigateToChooseTemplate = () => {
-//     setActiveTab("template"); // Set the active tab to "template"
-//   };
-
-//   return (
-//     <div className="animate-fade-in">
-//       <Tabs
-//         defaultValue={activeTab}
-//         value={activeTab}
-//         onValueChange={setActiveTab}
-//         className="w-full"
-//       >
-//         <div className="relative border-b border-gray-200 dark:border-gray-700 overflow-x-auto no-scrollbar">
-//           <TabsList className="w-full h-auto px-2 py-1 bg-transparent flex justify-start">
-//             {resumeTabs.map((tab) => (
-//               <TabsTrigger
-//                 key={tab.id}
-//                 value={tab.id}
-//                 className={`
-//                   px-4 py-3 flex items-center gap-2 whitespace-nowrap relative font-medium transition-all duration-300
-//                   ${
-//                     activeTab === tab.id
-//                       ? "text-purple-600 dark:text-purple-400"
-//                       : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-//                   }
-//                 `}
-//               >
-//                 {tab.icon}
-//                 {tab.name}
-//                 {activeTab === tab.id && (
-//                   <motion.div
-//                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 dark:bg-purple-400"
-//                     layoutId="activeTab"
-//                     initial={{ opacity: 0 }}
-//                     animate={{ opacity: 1 }}
-//                     exit={{ opacity: 0 }}
-//                     transition={{ duration: 0.2 }}
-//                   />
-//                 )}
-//               </TabsTrigger>
-//             ))}
-//           </TabsList>
-//         </div>
-
-//         {/* Tab Content */}
-//         <motion.div
-//           initial={{ opacity: 0, y: 10 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           transition={{ duration: 0.3 }}
-//           className="mt-4"
-//         >
-//           <TabsContent value="guidance" className="m-0">
-//             <ResumeGuidance />
-//           </TabsContent>
-
-//           <TabsContent value="template" className="m-0">
-//             <ResumeTemplates onTemplateSelect={handleTemplateSelection} />
-//           </TabsContent>
-
-//           <TabsContent value="myResumes" className="m-0">
-//             <MyResumes
-//               selectedTemplateIdForCreation={selectedTemplateIdForCreation}
-//               selectedTemplateNameForCreation={selectedTemplateNameForCreation}
-//               onNavigateToChooseTemplate={handleNavigateToChooseTemplate} // <--- Pass the new handler here
-//             />
-//           </TabsContent>
-
-//           <TabsContent value="aiImprovement" className="m-0">
-//             <AiImprovement />
-//           </TabsContent>
-
-//           <TabsContent value="universityMatch" className="m-0">
-//             <UniversityMatch />
-//           </TabsContent>
-
-//           <TabsContent value="successStories" className="m-0">
-//             <SuccessStories />
-//           </TabsContent>
-
-//           <TabsContent value="atsAnalysis" className="m-0">
-//             <AtsAnalysis />
-//           </TabsContent>
-//         </motion.div>
-//       </Tabs>
-//     </div>
-//   );
-// };
-
-// export default CreateResume;
-////////////////////////////////////////////
-///////////////////////////////////////
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../ui/button";
@@ -706,8 +522,9 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 h-[calc(100vh-120px)] overflow-hidden">
+      <div className="max-w-full mx-auto p-6">
+        {/* ارتفاع و overflow فقط در دسکتاپ قفل می‌شود */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:h-[calc(100vh-120px)] md:overflow-hidden">
           {/* LEFT - Chat Panel */}
           <div className="lg:col-span-1">
             <div
@@ -768,8 +585,8 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                 </Button>
               </div>
 
-              {/* Messages */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+              {/* Messages — اسکرول داخلی فقط در دسکتاپ */}
+              <div className="flex-1 min-h-[220px] md:min-h-0 md:overflow-y-auto p-4 space-y-3">
                 {messages.map((message, index) => (
                   <div
                     key={index}
@@ -856,92 +673,100 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
             className="lg:col-span-2 rounded-xl border flex flex-col h-full min-h-0 overflow-hidden"
             style={{ backgroundColor: "#111827", borderColor: "#25324a" }}
           >
+            {/* هدر پنل راست: در موبایل دو ردیفه می‌شود؛ دسکتاپ مثل قبل */}
             <div
-              className="p-4 border-b flex items-center justify-between shrink-0"
+              className="p-4 border-b shrink-0"
               style={{ borderColor: "#25324a" }}
             >
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge
-                  variant="outline"
-                  style={{
-                    backgroundColor: "#0b213a",
-                    borderColor: "#25324a",
-                    color: "#e5e7eb",
-                  }}
-                >
-                  Target: Computer Science (PhD)
-                </Badge>
-                <Badge
-                  variant="outline"
-                  style={{
-                    backgroundColor: "#0b213a",
-                    borderColor: "#25324a",
-                    color: "#e5e7eb",
-                  }}
-                >
-                  Country: USA
-                </Badge>
-                <Badge
-                  variant="outline"
-                  style={{
-                    backgroundColor: "#0b213a",
-                    borderColor: "#25324a",
-                    color: "#e5e7eb",
-                  }}
-                >
-                  Words ~ {totalWords}
-                </Badge>
-              </div>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant="outline"
+                    style={{
+                      backgroundColor: "#0b213a",
+                      borderColor: "#25324a",
+                      color: "#e5e7eb",
+                    }}
+                  >
+                    Target: Computer Science (PhD)
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    style={{
+                      backgroundColor: "#0b213a",
+                      borderColor: "#25324a",
+                      color: "#e5e7eb",
+                    }}
+                  >
+                    Country: USA
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    style={{
+                      backgroundColor: "#0b213a",
+                      borderColor: "#25324a",
+                      color: "#e5e7eb",
+                    }}
+                  >
+                    Words ~ {totalWords}
+                  </Badge>
+                </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReset}
-                  style={{
-                    backgroundColor: "#0e1526",
-                    borderColor: "#25324a",
-                    color: "#9ca3af",
-                  }}
-                >
-                  <RotateCcw className="w-4 h-4 mr-1" />
-                  Reset
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleReset}
+                    className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
+                    style={{
+                      backgroundColor: "#0e1526",
+                      borderColor: "#25324a",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-1" />
+                    Reset
+                  </Button>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={openPreview}
-                  style={{
-                    backgroundColor: "#0e1526",
-                    borderColor: "#25324a",
-                    color: "#9ca3af",
-                  }}
-                >
-                  Preview
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={openPreview}
+                    className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
+                    style={{
+                      backgroundColor: "#0e1526",
+                      borderColor: "#25324a",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    Preview
+                  </Button>
 
-                <Button
-                  size="sm"
-                  onClick={() => setExportOpen(true)}
-                  style={{ backgroundColor: "#7c3aed", color: "white" }}
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Export
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setExportOpen(true)}
+                    className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
+                    style={{ backgroundColor: "#7c3aed", color: "white" }}
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    Export
+                  </Button>
 
-                <Button
-                  size="sm"
-                  onClick={handleSaveAndCreate}
-                  style={{ backgroundColor: "#22c55e", color: "white" }}
-                >
-                  <Save className="w-4 h-4 mr-1" />
-                  Save & Create
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveAndCreate}
+                    className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
+                    style={{ backgroundColor: "#22c55e", color: "white" }}
+                  >
+                    <Save className="w-4 h-4 mr-1" />
+                    Save & Create
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+            {/* اسکرول داخلی فقط روی دسکتاپ */}
+            <div className="flex-1 md:min-h-0 md:overflow-y-auto p-4 space-y-4">
               {Object.entries(sections).map(([sectionKey, section]) => {
                 const wordCount = section.content
                   .split(/\s+/)
@@ -956,9 +781,9 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                       borderColor: "#25324a",
                     }}
                   >
-                    {/* Section Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
+                    {/* Section Header – در موبایل می‌شکند */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-medium">{section.title}</h3>
                         <span className="text-xs" style={{ color: "#9ca3af" }}>
                           Essential section for academic resumes
@@ -976,7 +801,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                         </Badge>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap gap-1">
                         {["Improve", "Shorten", "Expand"].map((action) => (
                           <Button
                             key={action}
@@ -985,7 +810,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                             onClick={() =>
                               handleSectionAction(sectionKey, action)
                             }
-                            className="text-xs px-2 py-1"
+                            className="h-8 px-2.5 text-[12px] md:h-9 md:px-3 md:text-sm"
                             style={{
                               backgroundColor: "#0e1526",
                               borderColor: "#25324a",
@@ -999,7 +824,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                     </div>
 
                     {/* Section Content */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                       {/* Left - Textarea */}
                       <div>
                         <Textarea
@@ -1007,7 +832,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                           onChange={(e) =>
                             updateSectionContent(sectionKey, e.target.value)
                           }
-                          className="min-h-32 text-sm"
+                          className="min-h-28 md:min-h-32 text-[13px] md:text-sm"
                           style={{
                             backgroundColor: "#0e1526",
                             borderColor: "#25324a",
@@ -1019,14 +844,14 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                       <div>
                         <div className="mb-2">
                           <span
-                            className="text-sm font-medium"
+                            className="text-[12px] md:text-sm font-medium"
                             style={{ color: "#9ca3af" }}
                           >
                             Preview
                           </span>
                         </div>
                         <div
-                          className="min-h-32 p-3 rounded border-2 border-dashed text-sm whitespace-pre-wrap"
+                          className="min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap"
                           style={{
                             borderColor: "#25324a",
                             backgroundColor: "#0b1020",
@@ -1038,7 +863,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                         <div className="flex items-center justify-between mt-2">
                           <Button
                             size="sm"
-                            className="text-xs"
+                            className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
                             style={{
                               backgroundColor: "#22c55e",
                               color: "white",
@@ -1049,7 +874,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
                             Save
                           </Button>
                           <span
-                            className="text-xs"
+                            className="text-[12px] md:text-xs"
                             style={{ color: "#9ca3af" }}
                           >
                             Word ~ {wordCount}
@@ -1063,6 +888,7 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
             </div>
           </div>
         </div>
+
         {/* start Modal */}
         <Dialog open={exportOpen} onOpenChange={setExportOpen}>
           <DialogContent>
@@ -1103,7 +929,6 @@ const ResumeBuilderTab = ({ selectedTemplate }: ResumeBuilderTabProps) => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
         {/* end modal */}
       </div>
     </div>

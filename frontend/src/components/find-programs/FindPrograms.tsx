@@ -1032,7 +1032,7 @@ const FindPrograms = () => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
-        <div className="rounded-2xl bg-[#111826] border border-gray-800 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-4 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <svg
               width="16"
@@ -1222,7 +1222,7 @@ const FindPrograms = () => {
                 onClick={applyFilters}
                 disabled={!isApplyEnabled || isChatBusy}
                 className={`ml-2 ${
-                  isApplyEnabled && isChatBusy
+                  isApplyEnabled && !isChatBusy
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}
@@ -1242,7 +1242,7 @@ const FindPrograms = () => {
         results={[
           <ResultsColumn
             key="programs-results"
-            padded
+            padded={false}
             emptyState={
               <div className="text-muted-foreground">No results to display</div>
             }
@@ -1266,34 +1266,35 @@ const FindPrograms = () => {
                   <AnimatedCard
                     key={program.id}
                     delay={0.2 + index * 0.1}
-                    className="border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
+                    className="border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 w-full"
                   >
-                    <CardContent className="p-4 sm:p-5">
-                      <div className="flex flex-col space-y-6">
-                        <div className="flex justify-between">
-                          <div className="flex items-start gap-4">
+                    <CardContent className="p-3 md:p-5 min-w-0">
+                      <div className="flex flex-col space-y-5 md:space-y-6 min-w-0">
+                        <div className="flex justify-between gap-3 min-w-0">
+                          <div className="flex items-start gap-3 md:gap-4 min-w-0">
                             <motion.div
                               whileHover={{ rotate: 5 }}
                               transition={{ duration: 0.2 }}
+                              className="shrink-0"
                             >
                               <img
                                 src={program.schoolLogo}
                                 alt={`${program.school} logo`}
-                                className="w-16 h-16 object-contain bg-gray-100 dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700"
+                                className="w-12 h-12 md:w-16 md:h-16 object-contain bg-gray-100 dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700"
                               />
                             </motion.div>
 
-                            <div>
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                <h3 className="text-base md:text-xl font-semibold text-gray-900 dark:text-white text-nowrap">
                                   {program.name}
                                 </h3>
-                                <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 px-3 py-1 rounded-full text-xs font-medium">
+                                <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300  rounded-full  font-medium text-[11px] md:text-xs px-2 py-1">
                                   {program.degreeType}
                                 </span>
                                 <span
                                   className={cn(
-                                    "px-3 py-1 rounded-full text-xs font-medium",
+                                    " rounded-full  font-medium text-[11px] md:text-xs px-2 py-1",
                                     program.fit === "High Fit"
                                       ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
                                       : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
@@ -1302,15 +1303,17 @@ const FindPrograms = () => {
                                   {program.fit}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                              <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400 text-xs md:text-sm ">
                                 <span>{program.degree}</span>
                                 <span className="text-xs mx-1">•</span>
-                                <span>{program.school}</span>
+                                <span className="truncate">
+                                  {program.school}
+                                </span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <Button
                               type="button"
                               variant="outline"
@@ -1319,8 +1322,8 @@ const FindPrograms = () => {
                               )}
                               className={`flex items-center gap-1 ${
                                 programsToCompare.includes(program.id)
-                                  ? "bg-green-900/20 text-green-400 border-green-800 hover:bg-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800/30"
-                                  : "bg-blue-900/20 text-blue-400 border-blue-800 hover:bg-blue-800/30 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-800/30"
+                                  ? "bg-green-900/20 text-green-400 border-green-800 hover:bg-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800/30 h-9 md:h-10 px-3 text-xs md:text-sm"
+                                  : "bg-blue-900/20 text-blue-400 border-blue-800 hover:bg-blue-800/30 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-800/30 h-9 md:h-10 px-3 text-xs md:text-sm"
                               }`}
                               onClick={() =>
                                 setProgramsToCompare((prev) =>
@@ -1343,7 +1346,7 @@ const FindPrograms = () => {
                               )}
                             </Button>
                             <button
-                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors h-9 w-9 md:h-10 md:w-10 rounded-md border flex items-center justify-center"
                               onClick={() => toggleFavorite(program.id)}
                               aria-label={
                                 favorites[program.id]
@@ -1379,60 +1382,60 @@ const FindPrograms = () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 md:p-4 min-w-0">
+                            <h4 className=" font-medium text-gray-700 dark:text-gray-300  text-sm md:text-base  mb-2 md:mb-3">
                               Program Features
                             </h4>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-2 md:gap-3">
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-400">
+                                <div className="w-7 h-7 md:w-8 md:h-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-400">
                                   🏆
                                 </div>
                                 <div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400">
                                     QS Ranking
                                   </div>
-                                  <div className="font-medium">
+                                  <div className="font-normal md:font-medium">
                                     # {program.qsRanking}
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
                                   ⏱️
                                 </div>
                                 <div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400">
                                     Duration
                                   </div>
-                                  <div className="font-medium">
+                                  <div className="font-normal md:font-medium">
                                     {program.duration}
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400">
+                                <div className="w-7 h-7 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400">
                                   🏫
                                 </div>
                                 <div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400">
                                     Campus
                                   </div>
-                                  <div className="font-medium">
+                                  <div className="font-normal md:font-medium">
                                     {program.campus}
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400">
+                                <div className="w-7 h-7 md:w-8 md:h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400">
                                   🗣️
                                 </div>
                                 <div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400">
                                     Language
                                   </div>
-                                  <div className="font-medium">
+                                  <div className="font-normal md:font-medium">
                                     {program.language}
                                   </div>
                                 </div>
@@ -1440,12 +1443,12 @@ const FindPrograms = () => {
                             </div>
                           </div>
 
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg md:p-3 p-4 min-w-0">
+                            <h4 className="font-medium text-gray-700 dark:text-gray-300 text-sm md:text-base mb-2 md:mb-3">
                               Application Deadline
                             </h4>
                             {program.deadline && program.deadline.length > 0 ? (
-                              <div className="flex flex-nowrap justify-center gap-1">
+                              <div className="flex flex-wrap justify-center gap-1.5 md:gap-2">
                                 {program.deadline.map((dl, index) => (
                                   <div
                                     key={index}
@@ -1493,20 +1496,18 @@ const FindPrograms = () => {
                             )}
                           </div>
 
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 sm:p-4">
-                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 md:p-4 min-w-0">
+                            <h4 className=" font-medium text-gray-700 dark:text-gray-300 text-sm md:text-base mb-2 md:mb-3">
                               Requirements (Min)
                             </h4>
-                            <div className="flex justify-around">
+                            <div className="flex justify-center gap-2 md:gap-4">
                               <StatCircle
                                 value={
-                                  programs.length
-                                    ? programs[0].requirements[
-                                        selectedFilters.english
-                                          ? selectedFilters.english.toLowerCase()
-                                          : "toefl"
-                                      ]?.min
-                                    : undefined
+                                  (program as any)?.requirements?.[
+                                    selectedFilters.english
+                                      ? selectedFilters.english.toLowerCase()
+                                      : "toefl"
+                                  ]?.min
                                 }
                                 label={
                                   selectedFilters.english
@@ -1515,12 +1516,18 @@ const FindPrograms = () => {
                                 }
                                 color="blue"
                                 isPercentage={false}
+                                size="lg"
+                                strokeWidth={4}
+                                className="shrink-0"
                               />
                               <StatCircle
-                                value={programs[0]?.requirements.gpa?.min}
+                                value={(program as any)?.requirements?.gpa?.min}
                                 label="GPA"
                                 color="green"
                                 isPercentage={false}
+                                size="lg"
+                                strokeWidth={4}
+                                className="shrink-0"
                               />
 
                               {/* GRE Status */}
@@ -1535,7 +1542,7 @@ const FindPrograms = () => {
                                 return (
                                   <div className="flex flex-col items-center">
                                     <div
-                                      className={`rounded-full h-[70px] w-[70px] flex items-center justify-center border-4 shadow-sm ${style.border} ${style.bg}`}
+                                      className={`rounded-full w-20 h-20 flex items-center justify-center border-4 shadow-sm ${style.border} ${style.bg}`}
                                     >
                                       <span
                                         className={`text-xl font-bold ${style.text}`}
@@ -1558,10 +1565,10 @@ const FindPrograms = () => {
                           </div>
                         </div>
 
-                        <div className="flex justify-end mt-2 gap-3">
+                        <div className="flex flex-col sm:flex-row justify-end mt-2 gap-2 md:gap-3">
                           <Button
                             variant="outline"
-                            className="text-purple-600 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                            className="text-purple-600 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
                             onClick={() => handleProgramInformation(program.id)}
                           >
                             Program Information
@@ -1570,8 +1577,8 @@ const FindPrograms = () => {
                             variant="ghost"
                             className={`${
                               programList.includes(String(program.id))
-                                ? "bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:shadow-red-500/30 "
-                                : "bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:shadow-green-500/30 "
+                                ? "bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:shadow-red-500/30 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
+                                : "bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:shadow-green-500/30 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
                             }shadow-md hover:shadow-lg transition-all`}
                             onClick={() =>
                               toggleProgramInList(program.id, program.name)
@@ -1610,6 +1617,14 @@ const FindPrograms = () => {
           chatHeightMode: "vh",
           chatHeight: 90,
           stickyChat: false,
+        }}
+        resultsGrid={{
+          minCardWidth: 280, // ← قبلاً 360 باعث اسکرول افقی می‌شد
+          gap: "6",
+          fill: "auto-fit",
+          densePacking: true,
+          equalizeCardHeight: true,
+          distributeCardWhitespace: true,
         }}
       />
 

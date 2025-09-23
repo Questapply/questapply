@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../ui/button";
 import { Filter } from "lucide-react";
 import LoadingSkeleton from "../loading-skeleton/LoadingSkeleton";
@@ -20,11 +20,16 @@ import ApplicationRow from "./ApplicationRow";
 import ApplyYourselfDialog from "./ApplyYourselfDialog";
 import SubmitWithUsDialog from "./SubmitWithUsDialog";
 
+/* ✅ اضافه‌شده فقط برای پنل چت (منطق اصلی دست نخورده) */
+import { Input } from "../ui/input";
+import { Badge } from "../ui/badge";
+
+/* --- انواع و توابع اصلیِ خودت بدون تغییر --- */
 type Season = "fall" | "spring" | "winter" | "summer";
 type UserMetaKV = { meta_key: string; meta_value: string };
-//uset meta type
+
 export interface UserMetas {
-  countryCode: number; // 24=US, 25=CA, ...
+  countryCode: number;
   application_gpa?: number;
   application_gre_total?: number;
   application_english_test?:
@@ -50,7 +55,6 @@ export interface UserMetas {
   submitted_ids?: number[];
 }
 
-// Define the type for the application data based on backend response and frontend needs
 export interface ProgramDetail {
   id: number;
   name: string;
@@ -62,10 +66,10 @@ export interface ProgramDetail {
   format: string | null;
   language: string;
   campus: string;
-  fit: string; // Based on backend calculation output
+  fit: string;
   ranking: number;
   qsRanking: string;
-  deadline: string; // Backend formats deadline as a string
+  deadline: string;
   requirements: {
     toefl: { min: number; avg: number };
     ielts: { min: number; avg: number };
@@ -122,36 +126,30 @@ export interface ProgramDetail {
   }[];
   careerOutcomes: { title: string; percentage: number }[];
   overview: string;
-  favorite: boolean; // Added in frontend logic
+  favorite: boolean;
   country: string;
   state: string;
-  // Add frontend-specific fields not directly from backend details API
-  status: "not_started" | "in_progress" | "completed" | "applied"; // Example statuses
-  actions: string[]; // Example actions
+  status: "not_started" | "in_progress" | "completed" | "applied";
+  actions: string[];
   documents: {
     name: string;
     status: "not_started" | "in_progress" | "completed" | "applied" | "pending";
-  }[]; // Added for frontend-specific documents
-
+  }[];
   programUrl?: string;
   schoolUrl?: string;
-  schoolCountryCode?: number; // 24 US, 25 CA, etc.
-
+  schoolCountryCode?: number;
   deadlines?: {
-    intl?: Partial<Record<Season, string>>; // 'YYYY-MM-DD' or undefined
+    intl?: Partial<Record<Season, string>>;
     domestic?: Partial<Record<Season, string>>;
   };
   eligibility?: EligibilityResult;
-
-  admissionChance?: number; // 0..100
-  alreadyApplied?: boolean; // for "Apply Yourself" button state
-  submitted?: boolean; // for "Submit with Us" vs "View Application"
+  admissionChance?: number;
+  alreadyApplied?: boolean;
+  submitted?: boolean;
 }
 
-// Fix for CreateLOR.tsx error by introducing missing variant type export
 export type ToastVariant = "default" | "destructive";
 
-// === Eligibility types & helpers (paste after imports/other types) ===
 type EligibilityStatus = "pass" | "fail" | "unknown";
 
 export interface EligibilityResult {
@@ -162,10 +160,8 @@ export interface EligibilityResult {
   mins?: { gpa?: number; gre?: number; english?: number };
 }
 
-// Normalization of the user language test name
 const normalizeTest = (t?: string) => (t || "").trim().toUpperCase();
 
-// Getting the user's language score based on the selected test.
 const getUserEnglishScore = (
   userMetas: any,
   normTest: string
@@ -189,7 +185,6 @@ const getUserEnglishScore = (
   }
 };
 
-// Minimum program language based on the selected test
 const getProgramEnglishMin = (
   req: ProgramDetail["requirements"],
   normTest: string
@@ -212,19 +207,16 @@ const getProgramEnglishMin = (
   }
 };
 
-// Eligibility calculation
 const computeEligibility = (
   detail: ProgramDetail,
   userMetas: any
 ): EligibilityResult => {
   const reasons: string[] = [];
-
   const greReq =
     (detail?.requirements?.gre?.status || "").toLowerCase() === "required";
   const greMin = Number(detail?.requirements?.gre?.min ?? NaN);
   const userGRE = Number(userMetas?.application_gre_total ?? NaN);
 
-  //GRE
   if (greReq) {
     if (!Number.isFinite(userGRE)) {
       reasons.push("GRE missing");
@@ -248,7 +240,6 @@ const computeEligibility = (
     }
   }
 
-  // GPA + English
   const userGPA = Number(userMetas?.application_gpa ?? NaN);
   if (!Number.isFinite(userGPA)) {
     reasons.push("GPA missing");
@@ -322,31 +313,31 @@ const computeEligibility = (
 type SortKey = "deadline" | "qs_rank" | "MIN_GPA" | "extra_appication_fee";
 type SortOrder = "asc" | "desc";
 
-// نزدیک‌ترین تاریخ ددلاین را به timestamp برمی‌گرداند
 function parseEarliestDeadline(deadline: unknown): number {
   if (!deadline) return Number.POSITIVE_INFINITY;
-
-  // اگر آرایه [{season,date}] باشد
   if (Array.isArray(deadline)) {
     const times = (deadline as any[])
       .map((d) => Date.parse(d?.date || ""))
-      .filter((n) => Number.isFinite(n));
-    return times.length ? Math.min(...times) : Number.POSITIVE_INFINITY;
+      .filter(Number.isFinite);
+    return times.length
+      ? Math.min(...(times as number[]))
+      : Number.POSITIVE_INFINITY;
   }
-
-  // اگر رشته مثل "Fall: 2025-11-01, Spring: 2026-02-01" باشد
   if (typeof deadline === "string") {
     const matches = deadline.match(/\d{4}-\d{2}-\d{2}/g);
     if (matches?.length) {
-      const times = matches
-        .map((s) => Date.parse(s))
-        .filter((n) => Number.isFinite(n));
-      return times.length ? Math.min(...times) : Number.POSITIVE_INFINITY;
+      const times = matches.map((s) => Date.parse(s)).filter(Number.isFinite);
+      return times.length
+        ? Math.min(...(times as number[]))
+        : Number.POSITIVE_INFINITY;
     }
   }
-
   return Number.POSITIVE_INFINITY;
 }
+
+/* ============================ */
+/*     ApplyNow Component       */
+/* ============================ */
 
 const ApplyNow = () => {
   const navigate = useNavigate();
@@ -357,23 +348,20 @@ const ApplyNow = () => {
   const [activeApplication, setActiveApplication] = useState<number | null>(
     null
   );
-  // Use the defined ProgramDetail type for the state
+
   const [userApplications, setUserApplications] = useState<ProgramDetail[]>([]);
   const [userMetas, setUserMetas] = useState<UserMetas | null>(null);
-  const [loading, setLoading] = useState(true); // Loading state
-  const [error, setError] = useState<string | null>(null); // Error state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // ---- Core data shape ----
   const [programIds, setProgramIds] = useState<number[]>([]);
   const [programsById, setProgramsById] = useState<
     Record<number, ProgramDetail>
   >({});
 
-  // ====== Sorting & Filtering state ======
   const [sortKey, setSortKey] = useState<SortKey>("qs_rank");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
-  // ---- Fine-grained loading/error states ----
   const [loadingMetas, setLoadingMetas] = useState(false);
   const [errorMetas, setErrorMetas] = useState<string | null>(null);
 
@@ -383,8 +371,7 @@ const ApplyNow = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [errorsById, setErrorsById] = useState<Record<number, string>>({});
 
-  // ---- App-specific user logic (plan/limits & per-program status) ----
-  const [applyLimit, setApplyLimit] = useState<number>(0); // computed from userMetas
+  const [applyLimit, setApplyLimit] = useState<number>(0);
   const [alreadyAppliedIds, setAlreadyAppliedIds] = useState<Set<number>>(
     new Set()
   );
@@ -396,12 +383,10 @@ const ApplyNow = () => {
 
   const { toast } = useToast();
 
-  // for <ApplicationRow />
   const userMetaPacked: RowUserMeta | null = useMemo(() => {
     return userMetas ? { meta_key: "all_meta", meta_value: userMetas } : null;
   }, [userMetas]);
 
-  // new
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -413,21 +398,16 @@ const ApplyNow = () => {
         return;
       }
 
-      // شروع لودینگ‌ها
       setLoading(true);
       setError(null);
-
       setLoadingMetas(true);
       setErrorMetas(null);
-
       setLoadingList(true);
       setErrorList(null);
-
       setLoadingDetails(true);
       setErrorsById({});
 
       try {
-        // 1) User Metas
         const metasRes = await fetch(
           "http://localhost:5000/api/user/all-meta",
           {
@@ -438,17 +418,15 @@ const ApplyNow = () => {
             },
           }
         );
-        if (!metasRes.ok) {
+        if (!metasRes.ok)
           throw new Error(
             `all-meta: ${metasRes.status} ${metasRes.statusText}`
           );
-        }
         const metas = await metasRes.json();
         if (signal.aborted) return;
 
         setUserMetas(metas ?? null);
 
-        //Apply Yourself
         const aytType = (metas?.ayt_type as string) ?? "free";
         const userPoint = Number(metas?.user_point ?? 0);
         const limit = aytType === "free" && userPoint < 200 ? 4 : 100000;
@@ -456,17 +434,8 @@ const ApplyNow = () => {
 
         setAlreadyAppliedIds(new Set<number>(metas?.already_applied_ids ?? []));
         setSubmittedIds(new Set<number>(metas?.submitted_ids ?? []));
-
-        // اگر از سرور status map داری، ست کن (فعلاً به صورت رشته تایپ می‌کنیم تا تداخلی پیش نیاد)
-        // if (metas?.application_status_map) {
-        //   setApplicationStatusMap(
-        //     metas.application_status_map as Record<number, string>
-        //   );
-        // }
-
         setLoadingMetas(false);
 
-        // 2) Program ID list
         const listRes = await fetch(
           "http://localhost:5000/api/program-data/program-list",
           {
@@ -477,11 +446,10 @@ const ApplyNow = () => {
             },
           }
         );
-        if (!listRes.ok) {
+        if (!listRes.ok)
           throw new Error(
             `program-list: ${listRes.status} ${listRes.statusText}`
           );
-        }
         const listJson = await listRes.json();
         const ids: number[] = listJson?.programList ?? [];
         if (signal.aborted) return;
@@ -497,7 +465,6 @@ const ApplyNow = () => {
           return;
         }
 
-        // 3) Details for each id (concurrent)
         const results = await Promise.all(
           ids.map(async (id) => {
             try {
@@ -513,7 +480,6 @@ const ApplyNow = () => {
               );
               if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
               const detail = (await r.json()) as ProgramDetail;
-              console.log("program Detail:", detail);
               return { id, detail };
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
@@ -524,7 +490,6 @@ const ApplyNow = () => {
         );
         if (signal.aborted) return;
 
-        // byId enrich UI
         const byId: Record<number, ProgramDetail> = {};
         for (const { id, detail } of results) {
           if (detail) {
@@ -565,7 +530,6 @@ const ApplyNow = () => {
     return () => controller.abort();
   }, [navigate]);
 
-  // آرایه نهایی که فیلتر و سورت شده
   const visibleApplications = useMemo(() => {
     const arr = [...userApplications];
     const o = sortOrder === "asc" ? 1 : -1;
@@ -589,7 +553,6 @@ const ApplyNow = () => {
         if (av === bv) return 0;
         return av > bv ? o : -o;
       }
-      // deadline
       const av = parseEarliestDeadline(a.deadline);
       const bv = parseEarliestDeadline(b.deadline);
       if (av === bv) return 0;
@@ -615,6 +578,7 @@ const ApplyNow = () => {
     );
   };
 
+  const [applyYourselfOpenState] = useState(false); // untouched API placeholders
   const toggleDetails = (applicationId: number) => {
     setExpandedDetails((prev) =>
       prev.includes(applicationId)
@@ -630,15 +594,13 @@ const ApplyNow = () => {
 
   const handleSubmitWithUs = (applicationId: number) => {
     setActiveApplication(applicationId);
-    navigate(`/psu/${applicationId} `);
+    navigate(`/dashboard/psu/${applicationId}`);
   };
 
   const handleStatusChange = (
     applicationId: number,
     newStatus: StatusValue
   ) => {
-    // In a real app, you would update the status in your data store
-    // For now, just update the local state for demonstration
     setUserApplications((prev) =>
       prev.map((app) =>
         app.id === applicationId
@@ -654,9 +616,9 @@ const ApplyNow = () => {
   };
 
   return (
-    <div className="p-6 animate-fade-in">
+    <div className="  p-6 animate-fade-in bg-gray-100 dark:bg-[#0b1020] min-h-screen">
       <motion.h1
-        className="text-2xl font-bold text-gray-900 dark:text-white mb-8"
+        className="text-2xl font-bold text-gray-100 mb-6"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -664,78 +626,88 @@ const ApplyNow = () => {
         My Applications
       </motion.h1>
 
-      {/* Filters */}
+      {/* Filters — سراسری و تمام‌عرض (بدون تغییر منطق) */}
       <ApplicationFilters
         sortKey={sortKey}
         sortOrder={sortOrder}
         onApply={handleApplyFilters}
       />
 
-      {/* Loading, Error, or Table */}
-      {loading && <LoadingSkeleton type="skeleton" count={5} />}
-      {error && <p className="text-red-500">Error: {error}</p>}
+      {/* گرید: ۱/۳ چت + ۲/۳ محتوای فعلی */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
+        {/* 1/3 — Chat (کاملاً مستقل) */}
+        <aside className="lg:col-span-1 min-w-0 ">
+          <ChatPanel />
+        </aside>
 
-      {!loading && !error && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full"
-        >
-          <Table className="table-fixed w-full">
-            <TableHeader>
-              <TableRow className="bg-gray-50 dark:bg-gray-900/50">
-                <TableHead className="font-medium w-1/3">Program</TableHead>
-                <TableHead className="font-medium w-[100px] text-center">
-                  Deadline
-                </TableHead>
-                <TableHead className="font-medium text-center w-[70px]">
-                  Fees
-                </TableHead>
-                <TableHead className="font-medium w-[80px] text-center">
-                  Eligibility
-                </TableHead>
-                <TableHead className="font-medium w-[120px] text-center">
-                  Admission Fit
-                </TableHead>
-                <TableHead className="font-medium text-center w-[120px]">
-                  Status
-                </TableHead>
-                <TableHead className="font-medium">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleApplications.length === 0 ? (
-                <TableRow>
-                  <td colSpan={7} className="text-center py-8">
-                    No programs match your filters.
-                  </td>
-                </TableRow>
-              ) : (
-                visibleApplications.map(
-                  (application: ProgramDetail, index: number) => (
-                    <ApplicationRow
-                      key={application.id}
-                      application={application}
-                      userMeta={userMetaPacked}
-                      documents={application.documents}
-                      expandedDetails={expandedDetails}
-                      toggleDetails={toggleDetails}
-                      handleApplyYourself={() =>
-                        handleApplyYourself(application.id)
-                      }
-                      handleSubmitWithUs={handleSubmitWithUs}
-                      handleStatusChange={handleStatusChange}
-                    />
-                  )
-                )
-              )}
-            </TableBody>
-          </Table>
-        </motion.div>
-      )}
+        {/* 2/3 — همـان محتوای فعلی (loading/error/table) بدون تغییر منطق */}
+        <section className="lg:col-span-2 min-w-0  ">
+          {loading && <LoadingSkeleton type="skeleton" count={5} />}
+          {error && <p className="text-red-400">Error: {error}</p>}
 
-      {/* Apply Yourself Dialog */}
+          {!loading && !error && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="w-full rounded-xl border border-[#25324a] bg-gray-200 dark:bg-[#111827] overflow-hidden"
+            >
+              <Table className="table-fixedmd:w-full">
+                <TableHeader>
+                  <TableRow className="dark:bg-gray-900/40 bg-gray-300 ">
+                    <TableHead className="font-medium  md:w-1/3">
+                      Program
+                    </TableHead>
+                    <TableHead className="font-medium  md:w-[100px] text-center ">
+                      Deadline
+                    </TableHead>
+                    <TableHead className="font-medium text-center md:w-[70px] ">
+                      Fees
+                    </TableHead>
+                    <TableHead className="font-medium md:w-[80px] text-center">
+                      Eligibility
+                    </TableHead>
+                    <TableHead className="font-medium md:w-[120px] text-center">
+                      Admission Fit
+                    </TableHead>
+                    <TableHead className="font-medium text-center md:w-[120px]">
+                      Status
+                    </TableHead>
+                    <TableHead className="font-medium">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleApplications.length === 0 ? (
+                    <TableRow>
+                      <td colSpan={7} className="text-center py-8">
+                        No programs match your filters.
+                      </td>
+                    </TableRow>
+                  ) : (
+                    visibleApplications.map((application: ProgramDetail) => (
+                      <ApplicationRow
+                        key={application.id}
+                        application={application}
+                        userMeta={userMetaPacked}
+                        documents={application.documents}
+                        expandedDetails={expandedDetails}
+                        toggleDetails={toggleDetails}
+                        handleApplyYourself={() =>
+                          handleApplyYourself(application.id)
+                        }
+                        handleSubmitWithUs={handleSubmitWithUs}
+                        handleStatusChange={handleStatusChange}
+                      />
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </motion.div>
+          )}
+        </section>
+      </div>
+
+      {/* Dialogs — مثل قبل در ریشه (بدون تغییر) */}
       <ApplyYourselfDialog
         open={applyYourselfOpen}
         onOpenChange={setApplyYourselfOpen}
@@ -743,15 +715,134 @@ const ApplyNow = () => {
         applications={userApplications}
       />
 
-      {/* Submit With Us Dialog */}
       <SubmitWithUsDialog
         open={submitWithUsOpen}
         onOpenChange={setSubmitWithUsOpen}
         activeApplication={activeApplication}
-        applications={userApplications} // Pass fetched applications here
+        applications={userApplications}
       />
     </div>
   );
 };
 
 export default ApplyNow;
+
+/* ============================= */
+/*      ChatPanel (Standalone)   */
+/* ============================= */
+
+function ChatPanel() {
+  const [messages, setMessages] = useState<
+    Array<{ role: "me" | "ai"; text: string }>
+  >([
+    {
+      role: "ai",
+      text: "Hi! I can help with deadlines, fees, and required documents for each program.",
+    },
+  ]);
+  const [value, setValue] = useState("");
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const send = () => {
+    const v = value.trim();
+    if (!v) return;
+    setMessages((m) => [...m, { role: "me", text: v }]);
+    setValue("");
+    setTimeout(() => {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "ai",
+          text: `✅ Noted: "${v}". I can draft a checklist or show closest deadlines.`,
+        },
+      ]);
+    }, 500);
+  };
+
+  const quick = (label: string) => {
+    setMessages((m) => [
+      ...m,
+      { role: "ai", text: `⏩ ${label} — here’s what I recommend next…` },
+    ]);
+  };
+
+  return (
+    <div className="rounded-xl border dark:border-[#25324a] bg-gray-200 border-gray-300 dark:bg-[#111827] flex flex-col h-screen lg:h-[calc(100vh-220px)]">
+      {/* header small */}
+      <div className="p-3 md:p-4 border-b border-[#25324a] flex items-center justify-between">
+        <Badge className="dark:bg-[#0b213a] border-[#25324a] text-[11px] bg-yellow-50 text-gray-900 dark:text-gray-100">
+          Apply • Assistant
+        </Badge>
+        <span className="text-xs dark:text-[#9ca3af] text-gray-900">
+          Draft v1 • Helper
+        </span>
+      </div>
+
+      {/* messages */}
+      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2.5">
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            className={`flex ${
+              m.role === "me" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`max-w-[82%] md:max-w-[75%] rounded-lg  border border-[#25324a] px-3 py-2 text-[13px] md:text-sm ${
+                m.role === "me"
+                  ? "bg-[#7c3aed26]"
+                  : "bg-gray-100 dark:bg-[#0e1526]"
+              }`}
+            >
+              {m.text}
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      {/* quick actions */}
+      <div className="px-3 md:px-4 pb-2 space-x-1.5">
+        {[
+          "Build docs checklist",
+          "Show closest deadlines",
+          "Estimate fees",
+        ].map((q) => (
+          <Button
+            key={q}
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 text-[12px] bg-gray-100 dark:bg-[#0e1526] border-[#25324a] text-gray-900 dark:text-[#9ca3af]"
+            onClick={() => quick(q)}
+          >
+            {q}
+          </Button>
+        ))}
+      </div>
+
+      {/* input */}
+      <div className="p-3 md:p-4 border-t border-[#25324a]">
+        <div className="flex gap-2">
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder='Ask e.g. "What do I need for Stanford CS?"'
+            className="flex-1 h-9 md:h-10 text-[13px] md:text-sm px-3 md:px-3.5 bg-blue-300 dark:bg-[#0e1526] border-[#25324a] text-gray-100 outline-none"
+          />
+          <Button
+            onClick={send}
+            className="h-9 md:h-10 px-3 md:px-4"
+            style={{ backgroundColor: "#7c3aed", color: "white" }}
+          >
+            Send
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -565,65 +565,15 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
 
   // === Builder (2/3) ===
   return (
-    <div className="min-h-screen">
-      {/* Header like SOP (colors matched) */}
-      <div className="sticky top-0 z-20 border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-gray-200 dark:border-gray-800">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" className="text-xs px-2 py-1">
-              Target: Computer Science (PhD)
-            </Badge>
-            <Badge variant="secondary" className="text-xs px-2 py-1">
-              Country: USA
-            </Badge>
-            <Badge variant="secondary" className="text-xs px-2 py-1">
-              Words ~ {wordCount}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={resetDraft}
-              title="Reset"
-            >
-              <RotateCcw className="w-3 h-3" /> Reset
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={scrollToPreview}
-              title="Preview"
-            >
-              <Eye className="w-3 h-3" /> Preview
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1 text-white bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
-              onClick={openExport}
-              title="Export"
-            >
-              <Download className="w-3 h-3" /> Export
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1 bg-emerald-600 dark:bg-green-500 text-white"
-              onClick={saveAll}
-              title="Save & Create"
-            >
-              <SaveIcon className="w-3 h-3" /> Save &amp; Create
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main */}
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 h-[calc(100vh-120px)] overflow-hidden">
-          {/* LEFT – Chat */}
-          <div className="lg:col-span-1 rounded-xl border flex flex-col h-full min-h-0 overflow-hidden bg-white/70 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800">
+    <div className="dir-ltr min-h-screen">
+      <div className="max-w-full mx-auto px-4 sm:px-6 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:h-[calc(100vh-70px)] lg:overflow-hidden">
+          {/* LEFT – Chat (1/3) */}
+          <div
+            className="lg:col-span-1 rounded-xl border bg-white/70 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 flex flex-col
+                        lg:h-full lg:min-h-0 lg:overflow-hidden"
+          >
+            {/* هدر چت (فقط مخصوص ستون چپ) */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex gap-1">
@@ -647,21 +597,19 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
                     </Button>
                   ))}
                 </div>
-                <span className="text-xs text-gray-500">
-                  Draft v1 • Builder
-                </span>
+                <Button
+                  size="sm"
+                  className="text-xs"
+                  style={{ background: "#7c3aed", color: "white" }}
+                  onClick={saveSnapshot}
+                >
+                  Save Snapshot
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={saveSnapshot}
-              >
-                Save Snapshot
-              </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* پیام‌ها – دسکتاپ اسکرول داخلی؛ موبایل طبیبعی */}
+            <div className="flex-1 p-4 space-y-3 lg:min-h-0 lg:overflow-y-auto">
               {messages.map((m, i) => (
                 <div
                   key={i}
@@ -683,49 +631,50 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-2">
-              <div className="text-xs font-medium text-gray-500 mb-2">
-                Quick Actions:
+            {/* اکشن‌های سریع + ورودی چت */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-3">
+              <div>
+                <div className="text-xs font-medium text-gray-500 mb-2">
+                  Quick Actions:
+                </div>
+                {[
+                  {
+                    label: "Improve Skills & Traits",
+                    key: "skills-and-traits" as SectionKey,
+                    mode: "improve" as const,
+                  },
+                  {
+                    label: "Expand Program Fit",
+                    key: "discussing-school" as SectionKey,
+                    mode: "expand" as const,
+                  },
+                  {
+                    label: "Shorten Final Endorsement",
+                    key: "final-endorsement" as SectionKey,
+                    mode: "shorten" as const,
+                  },
+                ].map((a) => (
+                  <Button
+                    key={a.label}
+                    variant="outline"
+                    size="sm"
+                    className="  text-xs gap-2 m-1"
+                    onClick={() => {
+                      applySectionChange(a.key, a.mode);
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          sender: "ai",
+                          content: `✅ ${a.mode} applied on **${a.key}**.`,
+                        },
+                      ]);
+                    }}
+                  >
+                    {a.label}
+                  </Button>
+                ))}
               </div>
-              {[
-                {
-                  label: "Improve Skills & Traits",
-                  key: "skills-and-traits" as SectionKey,
-                  mode: "improve" as const,
-                },
-                {
-                  label: "Expand Program Fit",
-                  key: "discussing-school" as SectionKey,
-                  mode: "expand" as const,
-                },
-                {
-                  label: "Shorten Final Endorsement",
-                  key: "final-endorsement" as SectionKey,
-                  mode: "shorten" as const,
-                },
-              ].map((a) => (
-                <Button
-                  key={a.label}
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start text-xs"
-                  onClick={() => {
-                    applySectionChange(a.key, a.mode);
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        sender: "ai",
-                        content: `✅ ${a.mode} applied on **${a.key}**.`,
-                      },
-                    ]);
-                  }}
-                >
-                  {a.label}
-                </Button>
-              ))}
-            </div>
 
-            <div className="p-4 border-t border-gray-200 dark:border-gray-800">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -746,12 +695,73 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
             </div>
           </div>
 
-          {/* RIGHT – Sections */}
-          <div className="lg:col-span-2 rounded-xl border h-full min-h-0 overflow-hidden bg-white/70 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* RIGHT – Sections (2/3) */}
+          <div
+            className="lg:col-span-2 rounded-xl border bg-white/70 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 flex flex-col
+                        lg:h-full lg:min-h-0 lg:overflow-hidden"
+          >
+            {/* هدر ابزارها ـــ فقط روی ستون راست (2/3) */}
+            <div
+              className="sticky top-0 z-10 border-b border-gray-200 dark:border-gray-800
+                          bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm"
+            >
+              <div className="px-4 py-3 sm:px-4 sm:py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="secondary" className="text-[11px] px-2 py-1">
+                    Target: Computer Science (PhD)
+                  </Badge>
+                  <Badge variant="secondary" className="text-[11px] px-2 py-1">
+                    Country: USA
+                  </Badge>
+                  <Badge variant="secondary" className="text-[11px] px-2 py-1">
+                    Words ~ {wordCount}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={resetDraft}
+                    title="Reset"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Reset
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={scrollToPreview}
+                    title="Preview"
+                  >
+                    <Eye className="w-3 h-3" /> Preview
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1 text-white bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
+                    onClick={openExport}
+                    title="Export"
+                  >
+                    <Download className="w-3 h-3" /> Export
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1 bg-emerald-600 dark:bg-green-500 text-white"
+                    onClick={saveAll}
+                    title="Save & Create"
+                  >
+                    <SaveIcon className="w-3 h-3" /> Save &amp; Create
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* بدنهٔ ستون راست: دسکتاپ اسکرول داخلی؛ موبایل عادی */}
+            <div className="px-4 py-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto space-y-4">
               {(Object.entries(sections) as [SectionKey, Section][])
-                .sort((a, b) => {
-                  const order: SectionKey[] = [
+                .sort(([aKey], [bKey]) => {
+                  const order = [
                     "greeting-recipient",
                     "candidate",
                     "recommender",
@@ -761,16 +771,25 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
                     "discussing-school",
                     "final-endorsement",
                     "date",
-                  ];
-                  return order.indexOf(a[0]) - order.indexOf(b[0]);
+                  ] as const;
+
+                  const ia = order.indexOf(aKey as any);
+                  const ib = order.indexOf(bKey as any);
+
+                  if (ia === -1 && ib === -1)
+                    return (aKey as string).localeCompare(bKey as string);
+                  if (ia === -1) return 1;
+                  if (ib === -1) return -1;
+                  return ia - ib;
                 })
                 .map(([key, section]) => (
                   <div
                     key={key}
                     className="border rounded-xl p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
+                    {/* هدر هر سکشن */}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+                      <div className="flex items-center flex-wrap gap-2 md:gap-3">
                         <h3 className="font-medium">{section.title}</h3>
                         <span className="text-xs text-gray-500">
                           {section.hint}
@@ -779,8 +798,9 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
                           {key}
                         </Badge>
                       </div>
+
                       {key !== "date" && (
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
                           <Button
                             onClick={() => applySectionChange(key, "improve")}
                             variant="outline"
@@ -809,6 +829,7 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
                       )}
                     </div>
 
+                    {/* فرم/پیش‌نمایش هر سکشن */}
                     {key === "date" ? (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div className="relative">
@@ -914,7 +935,7 @@ const MyLORs: React.FC<Props> = ({ onSaved }) => {
         </div>
       </div>
 
-      {/* Export Modal (like SOP) */}
+      {/* Export Modal (بدون تغییر منطقی) */}
       {showExport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-[420px] rounded-lg bg-[#0b1220] text-white p-5 shadow-xl border border-white/10">

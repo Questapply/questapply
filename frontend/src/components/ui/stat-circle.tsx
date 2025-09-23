@@ -45,8 +45,8 @@ export const StatCircle: React.FC<StatCircleProps> = ({
   // Size classes
   const sizeMap = {
     sm: "h-12 w-12 text-base",
-    md: "h-14 w-14 text-lg",
-    lg: "h-16 w-16 text-xl",
+    md: "h-16 w-16 text-lg",
+    lg: "h-20 w-20 text-xl",
   };
 
   return (

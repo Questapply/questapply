@@ -32,7 +32,7 @@ const NavigationButtons = ({
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
   }> = [
-    { to: "/dashboard/ai", label: "QuestApply AI", icon: Search, badge: "NEW" },
+    // { to: "/dashboard/ai", label: "QuestApply AI", icon: Search, badge: "NEW" },
     { to: "/dashboard/find-schools", label: "Find Schools", icon: Book },
     { to: "/dashboard/find-programs", label: "Find Programs", icon: BookOpen },
     { to: "/dashboard/find-professors", label: "Find Professors", icon: Users },
@@ -43,12 +43,30 @@ const NavigationButtons = ({
   ];
 
   return (
-    <div
-      className={`${
-        inline ? "mb-4" : "mb-8"
-      } w-full flex scrollbar-hide no-scrollbar`}
+    <nav
+      className={`${inline ? "mb-4" : "mb-8"} w-full relative -mx-4 md:-mx-6  `}
     >
-      <div className="flex justify-between w-full gap-2">
+      {/* فید گرادیانی کنارها (نمایش فقط موبایل) */}
+      <div className="pointer-events-none absolute left-0 top-0 h-10 w-8 bg-gradient-to-r from-background to-transparent md:hidden" />
+      <div className="pointer-events-none absolute right-0 top-0 h-10 w-8 bg-gradient-to-l from-background to-transparent md:hidden" />
+
+      {/* ردیف دکمه‌ها */}
+      <div
+        className="
+        scroll-strip w-full
+        pl-4 md:pl-6 
+        flex items-center gap-2 md:gap-x-4 lg:gap-x-8
+        overflow-x-auto md:overflow-visible
+        snap-x snap-mandatory md:snap-none
+        whitespace-nowrap   
+        md:justify-center
+          
+        "
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {/* مخفی کردن اسکرول‌بار در WebKit */}
+        <style>{`nav > div::-webkit-scrollbar{display:none}`}</style>
+
         {tabs.map(({ to, label, icon: Icon, badge }) => {
           const isActive = active(to);
           return (
@@ -57,13 +75,20 @@ const NavigationButtons = ({
               asChild
               variant={isActive ? "blueButton" : "outline"}
               size="sm"
-              className={`relative flex items-center gap-1.5 h-10 px-3 py-1 min-w-max transition-all duration-300 ${
-                isActive ? "" : baseInactive
-              } ${inline ? "text-xs" : ""}`}
+              className={`
+                relative inline-flex items-center gap-1.5 md:gap-2.5
+                h-10 md:h-12 px-3 md:px-4 py-1
+                rounded-xl
+                shrink-0 md:shrink snap-start
+                min-w-max
+                transition-all duration-300
+                ${isActive ? "" : baseInactive}
+                ${inline ? "text-xs" : "text-sm md:text-base"}
+              `}
             >
               <NavLink to={to}>
-                <Icon className="w-4 h-4" />
-                <span>{label}</span>
+                <Icon className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="truncate">{label}</span>
                 {badge && (
                   <span className="absolute -top-2 -right-2 px-1 py-0.5 text-[9px] font-bold bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-full animate-pulse">
                     {badge}
@@ -74,7 +99,7 @@ const NavigationButtons = ({
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 };
 

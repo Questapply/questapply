@@ -51,6 +51,19 @@ function normalizeOptions(options: FDOption[]) {
     typeof o === "string" ? { value: o, label: o } : o
   );
 }
+const basePill =
+  "flex items-center gap-1 px-3.5 rounded-full !py-1.5 text-[13px] md:text-sm font-medium transition-colors border";
+
+const idlePill =
+  "bg-white text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700";
+
+const activePill =
+  "bg-purple-50 text-purple-700 border-purple-200 \
+   dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700";
+
+const disabledPill =
+  "!bg-gray-100 !text-gray-400 !border-gray-200 \
+   dark:!bg-gray-900/30 dark:!text-gray-500 dark:!border-gray-800 opacity-80 cursor-not-allowed";
 
 const FilterDropdown: React.FC<Props> = ({
   label,
@@ -89,7 +102,7 @@ const FilterDropdown: React.FC<Props> = ({
       })),
     [options]
   );
-
+  const noOptions = !isLoading && (options?.length ?? 0) === 0;
   // تعداد انتخاب
   const selectionCount = isMulti
     ? selectedValues?.length ?? 0
@@ -172,10 +185,13 @@ const FilterDropdown: React.FC<Props> = ({
       <DropdownMenu open={isOpen && !disabled} onOpenChange={handleOpen}>
         <div
           className={cn(
-            "flex items-center gap-1 px-4 rounded-full text-xs border !py-1.5 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700",
-            selectionCount > 0 &&
-              "bg-purple-100 dark:bg-purple-900/30 text-purple-700 border-purple-200 dark:border-purple-700",
-            disabled && "opacity-50 cursor-not-allowed"
+            basePill,
+            disabled || noOptions
+              ? disabledPill
+              : selectionCount > 0
+              ? activePill
+              : idlePill,
+            className
           )}
         >
           <DropdownMenuTrigger asChild disabled={disabled}>
@@ -183,7 +199,8 @@ const FilterDropdown: React.FC<Props> = ({
               type="button"
               whileHover={disabled ? {} : { y: -3 }}
               className={cn(
-                "flex items-center gap-2 truncate",
+                "flex items-center gap-2  truncate text-inherit",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40 rounded-full",
                 buttonClassName
               )}
             >
@@ -195,7 +212,11 @@ const FilterDropdown: React.FC<Props> = ({
                 {buttonLabel}
               </span>
               {showCount && isMulti && selectionCount > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border-2 text-sky-400 font-semibold text-[14px]">
+                <span
+                  className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border-2
+                 bg-sky-200 text-sky-900 border-sky-200
+                 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/40"
+                >
                   {selectionCount}
                 </span>
               )}
@@ -205,7 +226,7 @@ const FilterDropdown: React.FC<Props> = ({
 
           {selectionCount > 0 && (
             <X
-              className="h-3.5 w-3.5 opacity-60 hover:opacity-100 cursor-pointer shrink-0"
+              className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300 cursor-pointer shrink-0"
               onClick={clearSelection}
             />
           )}

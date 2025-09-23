@@ -5,56 +5,55 @@ interface SchoolRankingsProps {
 }
 
 const SchoolRankings = ({ rankings }: SchoolRankingsProps) => {
-  // Map for ranking labels and colors
   const rankingLabels: Record<string, string> = {
     qs: "QS",
     usNews: "US",
     forbes: "FB",
     shanghai: "SH",
-    the: "THE"
+    the: "THE",
   };
 
-  // Map for text colors based on ranking service
   const rankingColors: Record<string, string> = {
     qs: "text-amber-400",
     usNews: "text-red-400",
     forbes: "text-blue-400",
     shanghai: "text-green-400",
-    the: "text-purple-400"
+    the: "text-purple-400",
   };
 
-  // Filter out rankings with 'N/A' values
+  // فقط آیتم‌های معتبر
   const validRankings = Object.entries(rankings).filter(
-    ([_, value]) => value !== 'N/A' && value !== undefined && value !== null
+    ([, v]) => v !== "N/A" && v !== undefined && v !== null && v !== ""
   );
-
-  // Don't render the component if there are no valid rankings
-  if (validRankings.length === 0) {
-    return null;
-  }
+  if (!validRankings.length) return null;
 
   return (
-    <div className="bg-gray-100 dark:bg-gray-800/60 px-4 py-1 rounded-lg">
-      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Rankings</h4>
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        {validRankings.map(([key, value]) => (
-          <motion.div 
-            key={key}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center"
-          >
-            <div 
-              className={`w-6 h-6 bg-gray-200 dark:bg-[#1A1A1A] rounded flex items-center justify-center shadow-lg`}
+    <div className="rounded-lg bg-gray-100/70 dark:bg-gray-800/60 p-2.5 md:p-3 min-w-0">
+      <h4 className="text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 md:mb-2">
+        Rankings
+      </h4>
+
+      {/* روی موبایل wrap شود؛ از md به بالا فاصله‌ها بیشتر */}
+      <div className="flex flex-wrap gap-1.5 md:gap-2 min-w-0">
+        {validRankings.map(([key, value]) => {
+          const label = rankingLabels[key] ?? key.toUpperCase();
+          const color = rankingColors[key] ?? "text-foreground";
+
+          return (
+            <motion.div
+              key={key}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="inline-flex items-center gap-1 px-2 py-1
+                         rounded-md border border-border bg-card
+                         text-[11px] md:text-xs leading-none"
             >
-              <span className={`font-bold text-xs ${rankingColors[key]}`}>{rankingLabels[key]}</span>
-            </div>
-            <div className="text-center">
-              <span className="text-xs font-medium text-gray-800 dark:text-white">#{value}</span>
-            </div>
-          </motion.div>
-        ))}
+              <span className={`font-semibold ${color}`}>{label}</span>
+              <span className="font-medium text-foreground">#{value}</span>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

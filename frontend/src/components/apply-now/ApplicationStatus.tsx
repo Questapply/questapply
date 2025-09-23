@@ -47,7 +47,7 @@ const ApplicationStatus = ({
 }: ApplicationStatusProps) => {
   const norm = normalizeStatus(status);
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex md:flex-col gap-2 items-center">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -79,9 +79,9 @@ const ApplicationStatus = ({
       </DropdownMenu>
 
       <Button
-        variant="ghost"
+        variant="outline"
         size="icon"
-        className="text-gray-400 hover:text-gray-600"
+        className="text-gray-400 hover:text-gray-600 bg-gray-800 md:w-24 md:px-10 border "
         onClick={toggleDetails}
       >
         {isExpanded ? (
@@ -90,10 +90,10 @@ const ApplicationStatus = ({
             animate={{ rotate: 180 }}
             transition={{ duration: 0.3 }}
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </motion.div>
         ) : (
-          <Eye className="h-5 w-5" />
+          <span className=" text-xs text-center text-gray-100">Details</span>
         )}
       </Button>
     </div>

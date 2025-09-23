@@ -2749,183 +2749,185 @@ const FindProfessors = () => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
-        <div className="flex items-center gap-2 mb-4">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            className="text-gray-500"
-          >
-            <path
-              d="M3 4.5h18M7 12h10M11 19.5h2"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <h2 className="font-semibold text-gray-700 dark:text-gray-200">
-            Filters
-          </h2>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {/* Country (single) */}
-          <FilterDropdown
-            label="Country"
-            icon={<span>{filterIcons.country}</span>}
-            options={allCountryOptions}
-            onSelect={(value) => handleFilterSelect("country", value)}
-            selectedValue={String((selectedFilters.country as string) || "")}
-            selectedLabel={selectedCountryLabel}
-            buttonClassName="!py-1.5"
-          />
-
-          {/* State (multi) + شمارنده */}
-          <FilterDropdown
-            label="State"
-            icon={<span>{filterIcons.state}</span>}
-            options={availableStates}
-            multiple
-            showCount
-            selectedValues={
-              Array.isArray(selectedFilters.state)
-                ? (selectedFilters.state as string[])
-                : []
-            }
-            onChange={(vals) =>
-              handleMultiFilterChange("state", vals as string[])
-            }
-            buttonClassName="!py-1.5"
-            disabled={
-              loadingStates ||
-              !selectedFilters.country ||
-              availableStates.length === 0
-            }
-          />
-
-          {/* School (single) */}
-          <FilterDropdown
-            label="School"
-            icon={<span>{filterIcons.schools}</span>}
-            options={availableSchoolsForDropdown}
-            onSelect={(value) => handleFilterSelect("school", value)}
-            selectedValue={String((selectedFilters.school as string) || "")}
-            selectedLabel={selectedSchoolLabel}
-            buttonClassName="!py-1.5"
-            disabled={
-              loadingSchoolsForDropdown ||
-              !selectedFilters.country ||
-              availableSchoolsForDropdown.length === 0
-            }
-          />
-
-          {/* Degree Level (single) */}
-          <FilterDropdown
-            label="Degree Level"
-            icon={<span>{filterIcons.degreeLevel}</span>}
-            options={mappedDegreeLevelOptions}
-            onSelect={(value) => handleFilterSelect("degreeLevel", value)}
-            selectedValue={String(
-              (selectedFilters.degreeLevel as string) || ""
-            )}
-            selectedLabel={selectedDegreeLevelLabel}
-            buttonClassName="!py-1.5"
-          />
-
-          {/* Area of Study (multi) */}
-          <FilterDropdown
-            label="Area of Study"
-            icon={<span>{filterIcons.areaOfStudy}</span>}
-            options={allAreaOfStudyOptions}
-            multiple
-            showCount
-            selectedValues={
-              Array.isArray(selectedFilters.areaOfStudy)
-                ? (selectedFilters.areaOfStudy as string[])
-                : []
-            }
-            onChange={(vals) =>
-              handleMultiFilterChange("areaOfStudy", vals as string[])
-            }
-            buttonClassName="!py-1.5"
-          />
-
-          {/* Program (multi) وابسته به Area + DegreeLevel */}
-          <FilterDropdown
-            label="Program"
-            icon={<span>{filterIcons.programs}</span>}
-            options={
-              availablePrograms.length
-                ? availablePrograms
-                : allProgramOptionsFallback
-            }
-            multiple
-            showCount
-            selectedValues={
-              Array.isArray(selectedFilters.program)
-                ? (selectedFilters.program as string[])
-                : []
-            }
-            onChange={(vals) =>
-              handleMultiFilterChange("program", vals as string[])
-            }
-            buttonClassName="!py-1.5"
-            disabled={
-              loadingPrograms ||
-              !(
-                Array.isArray(selectedFilters.areaOfStudy) &&
-                selectedFilters.areaOfStudy.length > 0
-              ) ||
-              !selectedFilters.degreeLevel ||
-              availablePrograms.length === 0
-            }
-          />
-
-          {/* Research Interest (multi) + شمارنده */}
-          <FilterDropdown
-            label="Research Interest"
-            icon={<span>{filterIcons.researchInterest}</span>}
-            options={mappedResearchInterestOptions}
-            multiple
-            showCount
-            selectedValues={
-              Array.isArray(selectedFilters.researchInterest)
-                ? (selectedFilters.researchInterest as string[])
-                : []
-            }
-            onChange={(vals) =>
-              handleMultiFilterChange("researchInterest", vals as string[])
-            }
-            buttonClassName="!py-1.5"
-          />
-
-          {/* Professor Title (single) */}
-          <FilterDropdown
-            label="Professor Title"
-            icon={<span>{filterIcons.title}</span>}
-            options={mappedProfessorTitleOptions}
-            onSelect={(value) => handleFilterSelect("title", value)}
-            selectedValue={String((selectedFilters.title as string) || "")}
-            selectedLabel={selectedProfessorTitleLabel}
-            buttonClassName="!py-1.5"
-          />
-
-          {/* دکمه Filter */}
-          <div className="flex items-center">
-            <Button
-              type="button"
-              onClick={applyFilters}
-              disabled={!isApplyEnabled || loading}
-              className={`ml-2 ${
-                isApplyEnabled && !loading
-                  ? "bg-blue-600 hover:bg-blue-700 text-white"
-                  : "opacity-50 cursor-not-allowed"
-              }`}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-4 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="text-gray-500"
             >
-              Filter
-            </Button>
+              <path
+                d="M3 4.5h18M7 12h10M11 19.5h2"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <h2 className="font-semibold text-gray-700 dark:text-gray-200">
+              Filters
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {/* Country (single) */}
+            <FilterDropdown
+              label="Country"
+              icon={<span>{filterIcons.country}</span>}
+              options={allCountryOptions}
+              onSelect={(value) => handleFilterSelect("country", value)}
+              selectedValue={String((selectedFilters.country as string) || "")}
+              selectedLabel={selectedCountryLabel}
+              buttonClassName="!py-1.5"
+            />
+
+            {/* State (multi) + شمارنده */}
+            <FilterDropdown
+              label="State"
+              icon={<span>{filterIcons.state}</span>}
+              options={availableStates}
+              multiple
+              showCount
+              selectedValues={
+                Array.isArray(selectedFilters.state)
+                  ? (selectedFilters.state as string[])
+                  : []
+              }
+              onChange={(vals) =>
+                handleMultiFilterChange("state", vals as string[])
+              }
+              buttonClassName="!py-1.5"
+              disabled={
+                loadingStates ||
+                !selectedFilters.country ||
+                availableStates.length === 0
+              }
+            />
+
+            {/* School (single) */}
+            <FilterDropdown
+              label="School"
+              icon={<span>{filterIcons.schools}</span>}
+              options={availableSchoolsForDropdown}
+              onSelect={(value) => handleFilterSelect("school", value)}
+              selectedValue={String((selectedFilters.school as string) || "")}
+              selectedLabel={selectedSchoolLabel}
+              buttonClassName="!py-1.5"
+              disabled={
+                loadingSchoolsForDropdown ||
+                !selectedFilters.country ||
+                availableSchoolsForDropdown.length === 0
+              }
+            />
+
+            {/* Degree Level (single) */}
+            <FilterDropdown
+              label="Degree Level"
+              icon={<span>{filterIcons.degreeLevel}</span>}
+              options={mappedDegreeLevelOptions}
+              onSelect={(value) => handleFilterSelect("degreeLevel", value)}
+              selectedValue={String(
+                (selectedFilters.degreeLevel as string) || ""
+              )}
+              selectedLabel={selectedDegreeLevelLabel}
+              buttonClassName="!py-1.5"
+            />
+
+            {/* Area of Study (multi) */}
+            <FilterDropdown
+              label="Area of Study"
+              icon={<span>{filterIcons.areaOfStudy}</span>}
+              options={allAreaOfStudyOptions}
+              multiple
+              showCount
+              selectedValues={
+                Array.isArray(selectedFilters.areaOfStudy)
+                  ? (selectedFilters.areaOfStudy as string[])
+                  : []
+              }
+              onChange={(vals) =>
+                handleMultiFilterChange("areaOfStudy", vals as string[])
+              }
+              buttonClassName="!py-1.5"
+            />
+
+            {/* Program (multi) وابسته به Area + DegreeLevel */}
+            <FilterDropdown
+              label="Program"
+              icon={<span>{filterIcons.programs}</span>}
+              options={
+                availablePrograms.length
+                  ? availablePrograms
+                  : allProgramOptionsFallback
+              }
+              multiple
+              showCount
+              selectedValues={
+                Array.isArray(selectedFilters.program)
+                  ? (selectedFilters.program as string[])
+                  : []
+              }
+              onChange={(vals) =>
+                handleMultiFilterChange("program", vals as string[])
+              }
+              buttonClassName="!py-1.5"
+              disabled={
+                loadingPrograms ||
+                !(
+                  Array.isArray(selectedFilters.areaOfStudy) &&
+                  selectedFilters.areaOfStudy.length > 0
+                ) ||
+                !selectedFilters.degreeLevel ||
+                availablePrograms.length === 0
+              }
+            />
+
+            {/* Research Interest (multi) + شمارنده */}
+            <FilterDropdown
+              label="Research Interest"
+              icon={<span>{filterIcons.researchInterest}</span>}
+              options={mappedResearchInterestOptions}
+              multiple
+              showCount
+              selectedValues={
+                Array.isArray(selectedFilters.researchInterest)
+                  ? (selectedFilters.researchInterest as string[])
+                  : []
+              }
+              onChange={(vals) =>
+                handleMultiFilterChange("researchInterest", vals as string[])
+              }
+              buttonClassName="!py-1.5"
+            />
+
+            {/* Professor Title (single) */}
+            <FilterDropdown
+              label="Professor Title"
+              icon={<span>{filterIcons.title}</span>}
+              options={mappedProfessorTitleOptions}
+              onSelect={(value) => handleFilterSelect("title", value)}
+              selectedValue={String((selectedFilters.title as string) || "")}
+              selectedLabel={selectedProfessorTitleLabel}
+              buttonClassName="!py-1.5"
+            />
+
+            {/* دکمه Filter */}
+            <div className="flex items-center">
+              <Button
+                type="button"
+                onClick={applyFilters}
+                disabled={!isApplyEnabled || loading}
+                className={`ml-2 ${
+                  isApplyEnabled && !loading
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                Filter
+              </Button>
+            </div>
           </div>
         </div>
       </motion.div>

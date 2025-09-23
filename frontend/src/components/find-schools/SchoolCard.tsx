@@ -48,9 +48,9 @@ const SchoolCard = ({
       className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-md hover:shadow-lg transition-all duration-300"
     >
       <div className="p-6">
-        <div className="flex flex-col md:flex-row gap-6">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 min-w-0">
           {/* Logo, Basic Info and Rankings */}
-          <div className="flex flex-col gap-2 w-full md:w-1/3">
+          <div className="flex flex-col gap-2 w-full md:w-1/3 min-w-0">
             <SchoolBasicInfo
               name={school.name}
               location={school.location}
@@ -60,11 +60,16 @@ const SchoolCard = ({
             />
 
             {/* Rankings */}
-            <SchoolRankings rankings={school.ranking} />
+            <div className="min-w-0">
+              <SchoolRankings rankings={school.ranking} />
+            </div>
 
             {/* Actions */}
-            <div className="flex gap-2 mt-2">
-              <Link to={`/dashboard/schools/${school.id}`}>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Link
+                className="w-full sm:w-auto flex-1"
+                to={`/dashboard/schools/${school.id}`}
+              >
                 <Button
                   variant="outline"
                   className="flex-1 bg-purple-900/20 text-purple-400 border-purple-800 hover:bg-purple-800/30 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-800/30"
@@ -98,19 +103,22 @@ const SchoolCard = ({
           </div>
 
           {/* Main Content */}
-          <div className="flex-grow">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="flex-grow min-w-0">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
               {/* Cost */}
-              <SchoolCost
-                inState={school.cost.inState}
-                outState={school.cost.outState}
-              />
+              <div className="min-w-0">
+                <SchoolCost
+                  inState={school.cost.inState}
+                  outState={school.cost.outState}
+                />
+              </div>
 
               {/* Statistics */}
-              <SchoolStatistics school={school} />
-
+              <div className="min-w-0">
+                <SchoolStatistics school={school} />
+              </div>
               {/* Programs */}
-              <div className="lg:col-span-2">
+              <div className="md:col-span-2 min-w-0">
                 <SchoolPrograms programs={school.programs} />
               </div>
             </div>

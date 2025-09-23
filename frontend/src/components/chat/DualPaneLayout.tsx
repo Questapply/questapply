@@ -75,7 +75,7 @@ const DualPaneLayout = ({
         : gap === "8"
         ? "gap-8"
         : "gap-10";
-    const gridTemplate = `repeat(${fill}, minmax(${minCardWidth}px, 1fr))`;
+    const gridTemplate = `repeat(${fill}, minmax(min(${minCardWidth}px, 100%), 1fr))`;
 
     return {
       className: cn(
@@ -101,7 +101,7 @@ const DualPaneLayout = ({
           // Separate boxes layout with gap
           <div
             className={cn(
-              "flex h-full p-6 bg-muted/30",
+              "flex flex-col md:flex-row h-full  bg-muted/30",
               boxGap === "4" && "gap-x-4",
               boxGap === "6" && "gap-x-6",
               boxGap === "8" && "gap-x-8",
@@ -111,8 +111,8 @@ const DualPaneLayout = ({
             {/* Chat Box */}
             <motion.div
               className={cn(
-                "flex flex-col rounded-lg border shadow-sm bg-card border-border min-h-0",
-                stickyChat ? "sticky" : ""
+                "flex flex-col rounded-lg border shadow-sm bg-card border-border min-h-0 min-w-0",
+                stickyChat ? "md:sticky" : ""
               )}
               style={{
                 width: `${chatRatio * 100}%`,
@@ -128,12 +128,12 @@ const DualPaneLayout = ({
 
             {/* Results Box */}
             <motion.div
-              className="flex-1 rounded-lg border shadow-sm overflow-hidden bg-card border-border min-h-0"
+              className="flex-1 rounded-lg border shadow-sm overflow-hidden bg-card border-border min-h-0 min-w-0"
               initial={{ x: 50, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.1 }}
             >
-              <div className="h-full overflow-auto p-6">
+              <div className="h-full overflow-auto overflow-x-hidden ">
                 {Array.isArray(results) ? (
                   <div
                     {...getGridClasses()}
