@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "npm --prefix server run start",
-    "build": "npm run build:server && npm run build:frontend",
+    "build": "npm run build:server",
     "build:server": "npm --prefix server ci && (npm --prefix server run build || echo no-build)",
     "build:frontend": "npm --prefix frontend ci && npm --prefix frontend run build",
     "preview:frontend": "npm --prefix frontend run preview"
