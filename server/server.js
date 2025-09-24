@@ -29,6 +29,7 @@ import { authenticateToken } from "./middleware/authMiddleware.js";
 dotenv.config();
 
 const app = express();
+console.log("[BOOT] mailer-fix v3");
 
 app.use(
   cors({
