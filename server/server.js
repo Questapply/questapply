@@ -26,7 +26,7 @@ import submissionRoutes from "./routes/submissionRoutes.js";
 import paymentsRouter from "./routes/paymentsRouter.js";
 import { authenticateToken } from "./middleware/authMiddleware.js";
 
-// dotenv.config();
+dotenv.config();
 
 const app = express();
 
