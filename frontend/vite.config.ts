@@ -5,8 +5,8 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: "localhost", // یا 0.0.0.0
-    port: 8080, // اگر 8080 می‌خواهی
+    host: "localhost",
+    port: 8080,
     proxy: { "/api": { target: "http://localhost:5000", changeOrigin: true } },
   },
   resolve: {
