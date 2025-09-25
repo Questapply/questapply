@@ -37,6 +37,7 @@ app.use(
       "http://localhost:8080",
       "http://localhost:3000",
       "http://localhost:5173",
+      "https://app-react-6e8v9.apps.teh2.abrhapaas.com",
     ],
     credentials: true,
   })
