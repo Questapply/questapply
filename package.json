@@ -2,6 +2,7 @@
   "name": "questapply-root",
   "private": true,
   "scripts": {
+    "build": "npm --prefix frontend ci && npm --prefix frontend run build",
     "build:server": "npm --prefix server ci && (npm --prefix server run build || echo no-build)",
     "start": "npm --prefix server ci && npm --prefix server run start"
   }
