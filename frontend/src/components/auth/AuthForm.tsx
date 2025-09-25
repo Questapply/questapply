@@ -18,6 +18,7 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useToast } from "../../hooks/use-toast";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Validation schemas
 const signupSchema = z.object({
@@ -94,12 +95,12 @@ const AuthForm = ({ mode, onToggleMode, isDarkMode }: AuthFormProps) => {
     let successDescription = "";
     let errorMessage = "";
     if (mode === "login") {
-      url = "http://localhost:5000/api/auth/login";
+      url = `${API_URL}/auth/login`;
       successTitle = "Login successful!";
       successDescription = "Welcome back to QuestApply.";
       errorMessage = "Login failed";
     } else {
-      url = "http://localhost:5000/api/auth/signup";
+      url = `${API_URL}/auth/signup`;
       successTitle = "Registration successful!";
       successDescription = "Please complete your profile.";
       errorMessage = "Registration failed";

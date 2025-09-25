@@ -1,7 +1,7 @@
 // src/components/ResumePreview.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 export default function ResumePreview() {
   const { id } = useParams<{ id: string }>();
   const [search] = useSearchParams();
@@ -26,7 +26,7 @@ export default function ResumePreview() {
 
     try {
       const token = localStorage.getItem("token") || "";
-      const resp = await fetch("http://localhost:5000/api/resume-data/export", {
+      const resp = await fetch(`${API_URL}/resume-data/export`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

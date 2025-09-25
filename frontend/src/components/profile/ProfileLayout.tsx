@@ -12,6 +12,7 @@ import { Step, StepData, ProfileStep } from "./ProfileTypes";
 import { countriesMap } from "../../lib/constants/countries";
 import { useAuth } from "../../context/AuthContext";
 import { useSearchParams } from "react-router-dom";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Define the steps
 const steps: Step[] = [
@@ -113,7 +114,7 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           : `Bearer ${token}`;
 
         // استفاده از آدرس کامل API
-        const apiUrl = "http://localhost:5000/api/user/profile-form";
+        const apiUrl = `${API_URL}/user/profile-form`;
 
         const response = await fetch(apiUrl, {
           headers: {
@@ -221,7 +222,7 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           ? token
           : `Bearer ${token}`;
 
-        const apiUrl = "http://localhost:5000/api/user/profile-form";
+        const apiUrl = `${API_URL}/user/profile-form`;
 
         let requestBody = {};
 

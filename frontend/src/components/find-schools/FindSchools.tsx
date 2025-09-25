@@ -34,6 +34,7 @@ import ChatHistory, { ChatMessage } from "../chat/ChatHistory";
 import ChatComposer from "../chat/ChatComposer";
 import ResultsColumn from "../chat/ResultsColumn";
 import type { SessionMeta } from "../chat/storage";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 
 type FiltersState = {
   country?: string;
@@ -405,7 +406,7 @@ const FindSchools = () => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `http://localhost:5000/api/states?country=${countryId}`,
+        `${API_URL}/states?country=${countryId}`,
         {
           method: "GET",
           headers: {
@@ -446,7 +447,7 @@ const FindSchools = () => {
         const token = localStorage.getItem("token");
         const requests = areaIds.map((id) =>
           fetch(
-            `http://localhost:5000/api/program-data/by-area?areaOfStudy=${id}&degreeLevel=${encodeURIComponent(
+            `${API_URL}/program-data/by-area?areaOfStudy=${id}&degreeLevel=${encodeURIComponent(
               degreeLevel
             )}`,
             {
@@ -493,7 +494,7 @@ const FindSchools = () => {
         if (countryId) params.append("country", String(countryId));
         if (stateId) params.append("state", String(stateId));
         const res = await fetch(
-          `http://localhost:5000/api/schools?${params.toString()}`,
+          `${API_URL}/schools?${params.toString()}`,
           {
             method: "GET",
             headers: {
@@ -555,7 +556,7 @@ const FindSchools = () => {
           queryParams.append("search", currentSearchQuery.trim());
 
         const response = await fetch(
-          `http://localhost:5000/api/schools?${queryParams.toString()}`,
+          `${API_URL}/schools?${queryParams.toString()}`,
           {
             method: "GET",
             headers: {
@@ -769,7 +770,7 @@ const FindSchools = () => {
       const action = isFav ? "remove" : "add";
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:5000/api/favorites/schools", {
+        const res = await fetch(`${API_URL}/favorites/schools`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,

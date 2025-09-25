@@ -37,8 +37,9 @@ import {
   updateSessionTitleLocal,
   type SessionMeta,
 } from "../chat/storage";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const API_BASE = "http://localhost:5000/api/program-data";
+const API_BASE = `${API_URL}/program-data`;
 
 // ---------------- Types ----------------
 type Program = {
@@ -261,16 +262,13 @@ const FindPrograms = () => {
     setLoadingStates(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(
-        `http://localhost:5000/api/states?country=${countryId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const res = await fetch(`${API_BASE}/states?country=${countryId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!res.ok) {
         setAvailableStates([]);
         setLoadingStates(false);
@@ -301,7 +299,7 @@ const FindPrograms = () => {
       const token = localStorage.getItem("token");
       // یک صفحه کافیست برای dropdown
       const res = await fetch(
-        `http://localhost:5000/api/schools?country=${countryId}&page=1&limit=50`,
+        `${API_BASE}/schools?country=${countryId}&page=1&limit=50`,
         {
           method: "GET",
           headers: {
@@ -342,7 +340,7 @@ const FindPrograms = () => {
         const results = await Promise.all(
           areas.map((areaId) =>
             fetch(
-              `http://localhost:5000/api/program-data/by-area?areaOfStudy=${areaId}&degreeLevel=${encodeURIComponent(
+              `${API_URL}/program-data/by-area?areaOfStudy=${areaId}&degreeLevel=${encodeURIComponent(
                 degreeLevel
               )}`,
               {
@@ -436,7 +434,7 @@ const FindPrograms = () => {
         });
 
         const res = await fetch(
-          `http://localhost:5000/api/program-data/find?${qp.toString()}`,
+          `${API_URL}/program-data/find?${qp.toString()}`,
           {
             method: "GET",
             headers: {
@@ -513,12 +511,9 @@ const FindPrograms = () => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    const res = await fetch(
-      "http://localhost:5000/api/program-data/program-list",
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    const res = await fetch(`${API_URL}/program-data/program-list`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const data = await res.json().catch(() => ({}));
     const ids = Array.isArray(data?.programList) ? data.programList : [];
     setProgramList(ids.map(String));
@@ -542,7 +537,7 @@ const FindPrograms = () => {
 
       try {
         const res = await fetch(
-          `http://localhost:5000/api/program-data/find?page=1&limit=10`,
+          `${API_URL}/program-data/find?page=1&limit=10`,
           {
             method: "GET",
             headers: {
@@ -728,17 +723,14 @@ const FindPrograms = () => {
           navigate("/auth?mode=login");
           return;
         }
-        const res = await fetch(
-          "http://localhost:5000/api/program-data/favorites",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ programId, action }),
-          }
-        );
+        const res = await fetch(`${API_URL}/program-data/favorites`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ programId, action }),
+        });
         if (!res.ok) throw new Error("Failed to update favorites");
 
         setFavorites((prev) => ({ ...prev, [programId]: !isFav }));
@@ -778,17 +770,14 @@ const FindPrograms = () => {
     const action = isInList ? "remove" : "add";
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/program-data/program-list",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ programId, action }),
-        }
-      );
+      const res = await fetch(`${API_URL}/program-data/program-list`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ programId, action }),
+      });
 
       const data = await res.json().catch(() => ({}));
 

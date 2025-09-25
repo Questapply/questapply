@@ -38,8 +38,7 @@ import { Input } from "../../ui/input";
 
 /* ===================== CONFIG ===================== */
 // Use relative base in prod; if you prefer, replace with env-based value
-const API_URL =
-  (import.meta as any)?.env?.VITE_API_BASE?.toString?.() ?? "/api";
+const API_URL = (import.meta as any)?.env?.VITE_API_URL?.toString?.() ?? "/api";
 
 /* -------------------- Common Section Wrapper -------------------- */
 interface ComparisonSectionProps {

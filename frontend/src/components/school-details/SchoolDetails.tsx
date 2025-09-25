@@ -25,7 +25,7 @@ import SchoolIntroVideo from "./SchoolIntroVideo";
 import ProgramCategories from "./ProgramCategories";
 import RequirementsTable from "./RequirementsTable";
 import StudentDemographics from "./StudentDemographics";
-import { s } from "node_modules/framer-motion/dist/types.d-D0HXPxHm";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 
 type Item = { title: string; programId: number };
 
@@ -424,7 +424,7 @@ const SchoolDetails = ({
           return;
         }
         const response = await fetch(
-          `http://localhost:5000/api/school/${schoolId}`,
+          `${API_URL}/school/${schoolId}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -467,7 +467,7 @@ const SchoolDetails = ({
     setProgError(null);
 
     fetch(
-      `http://localhost:5000/api/program-data/program-list?schoolId=${sid}&limit=1000`,
+      `${API_URL}/program-data/program-list?schoolId=${sid}&limit=1000`,
       {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
@@ -532,7 +532,7 @@ const SchoolDetails = ({
 
       // Then send request to server
       const response = await fetch(
-        "http://localhost:5000/api/favorites/schools",
+        `${API_URL}/favorites/schools`,
         {
           method: "POST",
           headers: {

@@ -18,24 +18,10 @@ const HomeRedirectWrapper: React.FC<HomeRedirectWrapperProps> = ({
 }) => {
   const { isAuthenticated, isLoading } = useAuth();
 
-  console.log(
-    `HomeRedirectWrapper Render: isLoading=${isLoading}, isAuthenticated=${isAuthenticated}`
-  );
-
   // Show a loading skeleton while AuthContext is determining its initial state.
   if (isLoading) {
-    console.log(
-      "HomeRedirectWrapper: AuthContext is still loading. Showing loading skeleton..."
-    );
     return <LoadingSkeleton type="skeleton" count={3} />;
   }
-
-  // Once AuthContext has finished loading (isLoading is false),
-  // render the appropriate Navbar and the Index page.
-  // No automatic redirection from here.
-  console.log(
-    `HomeRedirectWrapper: AuthContext finished loading. isAuthenticated: ${isAuthenticated}. Rendering Index page with appropriate Navbar.`
-  );
 
   return (
     <>

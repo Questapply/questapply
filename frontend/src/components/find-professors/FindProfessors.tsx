@@ -1593,6 +1593,8 @@ import { mergeFilterPatch } from "../chat/mergeFilters";
 
 import ResultsColumn from "../chat/ResultsColumn";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 /* -------------------------------- Types -------------------------------- */
 
 type Professor = {
@@ -1739,16 +1741,13 @@ const FindProfessors = () => {
     const token = localStorage.getItem("token");
     if (!token) return;
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/program-data/program-list",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const res = await fetch(`${API_URL}/program-data/program-list`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!res.ok) return;
       const data = await res.json();
       const arr = Array.isArray(data.programList)
@@ -1776,17 +1775,14 @@ const FindProfessors = () => {
       const action = isSelected ? "remove" : "add";
       setUpdatingIds((prev) => new Set(prev).add(pid));
       try {
-        const res = await fetch(
-          "http://localhost:5000/api/program-data/program-list",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ programId: pid, action }),
-          }
-        );
+        const res = await fetch(`${API_URL}/program-data/program-list`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ programId: pid, action }),
+        });
         if (!res.ok) throw new Error("Failed to update program list");
         const data = await res.json();
         const next = Array.isArray(data.programList)
@@ -1937,7 +1933,7 @@ const FindProfessors = () => {
         const token = localStorage.getItem("token");
         const requests = areaIds.map((id) =>
           fetch(
-            `http://localhost:5000/api/program-data/by-area?areaOfStudy=${id}&degreeLevel=${encodeURIComponent(
+            `${API_URL}/program-data/by-area?areaOfStudy=${id}&degreeLevel=${encodeURIComponent(
               degreeLevel
             )}`,
             {
@@ -1980,16 +1976,13 @@ const FindProfessors = () => {
     setLoadingStates(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(
-        `http://localhost:5000/api/states?country=${countryId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const res = await fetch(`${API_URL}/states?country=${countryId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!res.ok) {
         setAvailableStates([]);
         setLoadingStates(false);
@@ -2022,16 +2015,13 @@ const FindProfessors = () => {
         params.append("limit", "200");
         if (countryId) params.append("country", String(countryId));
         if (stateIdCsv) params.append("state", String(stateIdCsv));
-        const res = await fetch(
-          `http://localhost:5000/api/schools?${params.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const res = await fetch(`${API_URL}/schools?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
         if (!res.ok) {
           setAvailableSchoolsForDropdown([]);
           setLoadingSchoolsForDropdown(false);
@@ -2102,7 +2092,7 @@ const FindProfessors = () => {
         });
 
         const response = await fetch(
-          `http://localhost:5000/api/professor-data/find?${queryParams}`,
+          `${API_URL}/professor-data/find?${queryParams}`,
           {
             method: "GET",
             headers: {

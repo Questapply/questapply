@@ -19,6 +19,7 @@ import ApplicationFilters from "./ApplicationFilters";
 import ApplicationRow from "./ApplicationRow";
 import ApplyYourselfDialog from "./ApplyYourselfDialog";
 import SubmitWithUsDialog from "./SubmitWithUsDialog";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 /* ✅ اضافه‌شده فقط برای پنل چت (منطق اصلی دست نخورده) */
 import { Input } from "../ui/input";
@@ -408,16 +409,13 @@ const ApplyNow = () => {
       setErrorsById({});
 
       try {
-        const metasRes = await fetch(
-          "http://localhost:5000/api/user/all-meta",
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const metasRes = await fetch(`${API_URL}/user/all-meta`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
         if (!metasRes.ok)
           throw new Error(
             `all-meta: ${metasRes.status} ${metasRes.statusText}`
@@ -436,16 +434,13 @@ const ApplyNow = () => {
         setSubmittedIds(new Set<number>(metas?.submitted_ids ?? []));
         setLoadingMetas(false);
 
-        const listRes = await fetch(
-          "http://localhost:5000/api/program-data/program-list",
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const listRes = await fetch(`${API_URL}/program-data/program-list`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
         if (!listRes.ok)
           throw new Error(
             `program-list: ${listRes.status} ${listRes.statusText}`
@@ -468,16 +463,13 @@ const ApplyNow = () => {
         const results = await Promise.all(
           ids.map(async (id) => {
             try {
-              const r = await fetch(
-                `http://localhost:5000/api/program-data/details/${id}`,
-                {
-                  method: "GET",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
+              const r = await fetch(`${API_URL}/program-data/details/${id}`, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              });
               if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
               const detail = (await r.json()) as ProgramDetail;
               return { id, detail };

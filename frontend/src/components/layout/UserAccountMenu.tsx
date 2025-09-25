@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { useToast } from "../../hooks/use-toast";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const UserAccountMenu = () => {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ const UserAccountMenu = () => {
           navigate("/auth?mode=login");
           return;
         }
-        const response = await fetch("http://localhost:5000/api/user/profile", {
+        const response = await fetch(`${API_URL}/user/profile`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
