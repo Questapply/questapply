@@ -66,8 +66,6 @@ app.use(
   })
 );
 
-app.options("*", cors({ origin: true, credentials: true }));
-
 // API endpoint for authentication
 app.use("/api/auth", authRoutes);
 
