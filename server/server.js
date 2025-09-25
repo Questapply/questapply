@@ -37,11 +37,26 @@ app.use(
       "http://localhost:8080",
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://app-react-6e8v9.apps.teh2.abrhapaas.com",
     ],
+  })
+);
+const ENV_ORIGINS = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const ALLOWED = new Set([...DEFAULT_ORIGINS, ...ENV_ORIGINS]);
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl/Postman
+      cb(ALLOWED.has(origin) ? null : new Error("CORS"), true);
+    },
     credentials: true,
   })
 );
+app.options("*", cors({ origin: true, credentials: true })); // preflight
 app.use(express.json());
 
 // API endpoint for authentication
