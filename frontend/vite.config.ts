@@ -14,6 +14,7 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)), // ← مهم
     },
   },
+  build: { outDir: "build" },
 });
 ////////////////////////////
 // import { defineConfig } from "vite";
