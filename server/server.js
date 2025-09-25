@@ -40,24 +40,33 @@ app.use(
     ],
   })
 );
+const DEFAULT_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
 const ENV_ORIGINS = (process.env.CORS_ORIGIN || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const ALLOWED = new Set([...DEFAULT_ORIGINS, ...ENV_ORIGINS]);
+const ALLOWED_ORIGINS = [...new Set([...DEFAULT_ORIGINS, ...ENV_ORIGINS])];
 
+// دو روش؛ یکی را انتخاب کن (اولی انعطاف‌پذیرتر است)
+
+// روش 1: تابع (اگر فقط بعضی originها مجازند)
 app.use(
   cors({
-    origin: (origin, cb) => {
+    origin(origin, cb) {
       if (!origin) return cb(null, true); // curl/Postman
-      cb(ALLOWED.has(origin) ? null : new Error("CORS"), true);
+      cb(ALLOWED_ORIGINS.includes(origin) ? null : new Error("CORS"), true);
     },
     credentials: true,
   })
 );
-app.options("*", cors({ origin: true, credentials: true })); // preflight
-app.use(express.json());
+
+app.options("*", cors({ origin: true, credentials: true }));
 
 // API endpoint for authentication
 app.use("/api/auth", authRoutes);
