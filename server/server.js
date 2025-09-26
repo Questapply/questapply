@@ -30,16 +30,8 @@ dotenv.config();
 
 const app = express();
 console.log("[BOOT] mailer-fix v3");
+app.use(express.json());
 
-app.use(
-  cors({
-    origin: [
-      "http://localhost:8080",
-      "http://localhost:3000",
-      "http://localhost:5173",
-    ],
-  })
-);
 const DEFAULT_ORIGINS = [
   "http://localhost:8080",
   "http://localhost:3000",
@@ -52,19 +44,24 @@ const ENV_ORIGINS = (process.env.CORS_ORIGIN || "")
   .filter(Boolean);
 
 const ALLOWED_ORIGINS = [...new Set([...DEFAULT_ORIGINS, ...ENV_ORIGINS])];
+console.log("[CORS] allowed =", ALLOWED_ORIGINS);
 
-// دو روش؛ یکی را انتخاب کن (اولی انعطاف‌پذیرتر است)
+const originFn = (origin, cb) => {
+  if (!origin) return cb(null, true); // curl/Postman
+  if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+  return cb(new Error("CORS not allowed: " + origin));
+};
 
-// روش 1: تابع (اگر فقط بعضی originها مجازند)
+// CORS باید قبل از تمام routeها باشد
 app.use(
   cors({
-    origin(origin, cb) {
-      if (!origin) return cb(null, true); // curl/Postman
-      cb(ALLOWED_ORIGINS.includes(origin) ? null : new Error("CORS"), true);
-    },
+    origin: originFn,
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+app.options(/.*/, cors({ origin: originFn, credentials: true }));)
 
 // API endpoint for authentication
 app.use("/api/auth", authRoutes);
