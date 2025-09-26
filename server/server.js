@@ -30,14 +30,14 @@ dotenv.config();
 
 const app = express();
 console.log("[BOOT] mailer-fix v3");
-app.use(express.json());
 
 const DEFAULT_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:3000",
   "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:8080",
 ];
 
+// پنل PaaS: مثلا CORS_ORIGIN=https://app-react-533nd.apps.teh2.abrhapaas.com
 const ENV_ORIGINS = (process.env.CORS_ORIGIN || "")
   .split(",")
   .map((s) => s.trim())
@@ -47,12 +47,19 @@ const ALLOWED_ORIGINS = [...new Set([...DEFAULT_ORIGINS, ...ENV_ORIGINS])];
 console.log("[CORS] allowed =", ALLOWED_ORIGINS);
 
 const originFn = (origin, cb) => {
-  if (!origin) return cb(null, true); // curl/Postman
+  // درخواست‌های بدون Origin (curl/Postman/health) را آزاد کن
+  if (!origin) return cb(null, true);
   if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-  return cb(new Error("CORS not allowed: " + origin));
+  return cb(new Error("CORS_NOT_ALLOWED"));
 };
 
-// CORS باید قبل از تمام routeها باشد
+// هدر Vary برای کش/CDN
+app.use((req, res, next) => {
+  res.header("Vary", "Origin");
+  next();
+});
+
+// خود CORS باید قبل از همه‌ی روت‌ها باشد
 app.use(
   cors({
     origin: originFn,
@@ -61,8 +68,20 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.options(/.*/, cors({ origin: originFn, credentials: true }));)
 
+// پاسخ به preflight برای همه مسیرها
+app.options("*", cors({ origin: originFn, credentials: true }));
+
+// اگر originFn خطا داد، این هندلر جلوی Crash را می‌گیرد
+app.use((err, req, res, next) => {
+  if (err?.message === "CORS_NOT_ALLOWED") {
+    return res.status(403).json({ error: "CORS blocked" });
+  }
+  next(err);
+});
+// ---- پایان CORS ----
+
+app.use(express.json());
 // API endpoint for authentication
 app.use("/api/auth", authRoutes);
 
