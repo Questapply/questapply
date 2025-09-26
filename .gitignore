@@ -28,3 +28,4 @@ frontend/.env*
 backup/
 !server/.env.example
 !frontend/.env.example
+!frontend/.env.production
