@@ -50,7 +50,7 @@ export type SopSampleBundle = {
  * Base URLs & headers
  * ========================= */
 export const API_BASE =
-  import.meta.env.VITE_API_BASE ?? "http://localhost:5000/api";
+  import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
 
 export const SOP_BASE = `${API_BASE}/sop`;
 
