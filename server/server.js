@@ -70,7 +70,7 @@ app.use(
 );
 
 // پاسخ به preflight برای همه مسیرها
-app.options("*", cors({ origin: originFn, credentials: true }));
+app.options("(.*)", cors({ origin: originFn, credentials: true }));
 
 // اگر originFn خطا داد، این هندلر جلوی Crash را می‌گیرد
 app.use((err, req, res, next) => {
