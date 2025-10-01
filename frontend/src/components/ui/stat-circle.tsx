@@ -12,6 +12,7 @@ interface StatCircleProps {
   isPercentage?: boolean;
   valueClassName?: string;
   labelClassName?: string;
+  emptyText?: string;
 }
 
 export const StatCircle: React.FC<StatCircleProps> = ({
@@ -24,10 +25,12 @@ export const StatCircle: React.FC<StatCircleProps> = ({
   isPercentage = true,
   valueClassName,
   labelClassName,
+  emptyText = "No",
 }) => {
   // Get numeric value for animation
   const numericValue = typeof value === "string" ? parseInt(value) : value;
   const displayValue = isPercentage ? `${value}%` : value;
+  const hasValue = typeof value === "number" && value > 0;
 
   // Colors based on theme
   const colorMap = {
@@ -67,7 +70,13 @@ export const StatCircle: React.FC<StatCircleProps> = ({
         }}
         whileHover={{ scale: 1.05 }}
       >
-        <span className={cn("font-bold", valueClassName)}>{displayValue}</span>
+        {hasValue ? (
+          <span className={cn("font-bold", valueClassName)}>
+            {displayValue}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">{emptyText}</span>
+        )}
       </motion.div>
       <span
         className={cn(

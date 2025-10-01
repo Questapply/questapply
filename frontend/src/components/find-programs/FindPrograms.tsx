@@ -15,6 +15,7 @@ import { useChatController } from "../chat/useChatController";
 import { mergeFilterPatch } from "../chat/mergeFilters";
 import type { FilterSnapshot, FilterPatch } from "../chat/actions";
 import ResultsColumn from "../chat/ResultsColumn";
+import ProgramResultCard from "@/components/find-programs/ProgramResultCard";
 
 import {
   degreeLevelOptions,
@@ -37,6 +38,9 @@ import {
   updateSessionTitleLocal,
   type SessionMeta,
 } from "../chat/storage";
+import DeadlineDropdown from "../filters/DeadlineDropdown";
+import EnglishDropdown from "../filters/EnglishDropdown";
+import GpaDropdown from "../filters/GpaDropdown";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const API_BASE = `${API_URL}/program-data`;
@@ -94,10 +98,12 @@ type FiltersState = {
   program?: string[]; // multi
   orderBy?: string;
   // سایر فیلترها هم هستند، ولی این ۷ مورد با Apply اعمال می‌شن
-  english?: string; // فقط مقدار اولیه‌اش از userPreferences می‌نشیند (بی‌تغییر در منطق)
+  english?: string;
+  englishScore?: string;
   gpa?: string;
   gre?: string;
   deadline?: string;
+  deadlineMonths?: string[]; // ماه‌ها: ["September","October"]
 };
 
 type Option = { value: string; label: string };
@@ -114,13 +120,19 @@ const mapFiltersToApiParams = (
   Object.entries(filters).forEach(([key, value]) => {
     if (value == null) return;
     if (Array.isArray(value)) {
-      if (value.length) out[key] = value.map(String).join(",");
+      if (value.length) {
+        const apiKey = key === "deadlineMonths" ? "deadline_months" : key;
+        out[apiKey] = value.map(String).join(",");
+      }
       return;
     }
     const s = String(value).trim();
     if (!s) return;
     out[key] = s;
   });
+  if (!filters.english) {
+    delete out.englishScore;
+  }
   if (!out.orderBy) out.orderBy = "qs_rank";
   return out;
 };
@@ -190,6 +202,9 @@ const getGREStatusStyle = (status: GreStatus) => {
 };
 
 const PAGE_ID = "find-programs";
+const FILTER_WIDTH = "w-[150px] sm:w-[180px] md:w-[260px]";
+const FILTER_BTN = "truncate";
+
 // ---------------- Component ----------------
 const FindPrograms = () => {
   const navigate = useNavigate();
@@ -262,7 +277,7 @@ const FindPrograms = () => {
     setLoadingStates(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/states?country=${countryId}`, {
+      const res = await fetch(`${API_URL}/states?country=${countryId}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -299,7 +314,7 @@ const FindPrograms = () => {
       const token = localStorage.getItem("token");
       // یک صفحه کافیست برای dropdown
       const res = await fetch(
-        `${API_BASE}/schools?country=${countryId}&page=1&limit=50`,
+        `${API_URL}/schools?country=${countryId}&page=1&limit=50`,
         {
           method: "GET",
           headers: {
@@ -379,7 +394,7 @@ const FindPrograms = () => {
       return;
     }
 
-    const res = await fetch(`${API_BASE}/favorites`, {
+    const res = await fetch(`${API_URL}/favorites`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -635,7 +650,6 @@ const FindPrograms = () => {
           }
         }
         if (key === "degreeLevel") {
-          next.program = [];
           const areas = Array.isArray(next.areaOfStudy) ? next.areaOfStudy : [];
           if (areas.length && value) {
             fetchProgramsByAreasAndLevel(areas, value);
@@ -695,9 +709,11 @@ const FindPrograms = () => {
       orderBy: selectedFilters.orderBy || "qs_rank",
 
       english: selectedFilters.english,
+      englishScore: selectedFilters.englishScore,
       gpa: selectedFilters.gpa,
       gre: selectedFilters.gre,
       deadline: selectedFilters.deadline,
+      deadlineMonths: selectedFilters.deadlineMonths,
     });
     fetchPrograms(1, false, params);
   };
@@ -1043,7 +1059,12 @@ const FindPrograms = () => {
             </h2>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div
+            className="grid
+    grid-cols-[repeat(2,max-content)]
+    md:grid-cols-[repeat(4,max-content)]
+    gap-2 md:gap-6 justify-center"
+          >
             {/* Country (single) */}
             <FilterDropdown
               label="Country"
@@ -1051,7 +1072,9 @@ const FindPrograms = () => {
               options={countryOptions}
               onSelect={(v) => handleFilterChange("country", v)}
               selectedValue={selectedFilters.country || ""}
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* State (multi + counter) */}
@@ -1070,7 +1093,9 @@ const FindPrograms = () => {
                 !selectedFilters.country ||
                 availableStates.length === 0
               }
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* School (single) */}
@@ -1085,7 +1110,9 @@ const FindPrograms = () => {
                 !selectedFilters.country ||
                 availableSchools.length === 0
               }
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* Degree Level (single) */}
@@ -1095,7 +1122,9 @@ const FindPrograms = () => {
               options={degreeLevelOptions}
               onSelect={(v) => handleFilterChange("degreeLevel", v)}
               selectedValue={selectedFilters.degreeLevel || ""}
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* Area of Study (multi + counter) */}
@@ -1109,7 +1138,9 @@ const FindPrograms = () => {
               onChange={(vals) =>
                 handleMultiFilterChange("areaOfStudy", vals as string[])
               }
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* Programs (multi + counter) */}
@@ -1132,7 +1163,9 @@ const FindPrograms = () => {
                 !selectedFilters.degreeLevel ||
                 availablePrograms.length === 0
               }
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* Order By (single) */}
@@ -1142,46 +1175,71 @@ const FindPrograms = () => {
               options={orderByProgramOptions}
               onSelect={(v) => handleFilterChange("orderBy", v)}
               selectedValue={selectedFilters.orderBy || "qs_rank"}
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
 
             {/* ===== باقی فیلترها: منطق قبلی؛ فقط English مقدار اولیه از userPreferences ===== */}
-            <FilterDropdown
-              label="Deadline"
-              icon={<span>{filterIcons.deadline}</span>}
-              options={[
-                { value: "deadline_fall", label: "Fall" },
-                { value: "deadline_winter", label: "Winter" },
-                { value: "deadline_spring", label: "Spring" },
-                { value: "deadline_summer", label: "Summer" },
-              ]}
-              onSelect={(value) => {
-                setSelectedFilters((p) => ({ ...p, deadline: value || "" }));
+
+            <DeadlineDropdown
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
+              value={{
+                season: selectedFilters.deadline, // قبلاً string
+                months: selectedFilters.deadlineMonths || [], // جدید
               }}
-              selectedValue={selectedFilters.deadline || ""}
-              buttonClassName="!py-1.5"
+              onChange={({ season, months }) => {
+                setSelectedFilters((p) => ({
+                  ...p,
+                  deadline: season || "", // اگر نخواستی خالی شود، همون قبلی را نگه دار
+                  deadlineMonths: months || [],
+                }));
+              }}
+              apiBase={`${API_URL}/program-data`}
+              authToken={localStorage.getItem("token") || undefined}
+              otherParams={{
+                country: selectedFilters.country,
+                degreeLevel: selectedFilters.degreeLevel,
+                state: selectedFilters.state, // CSV auto
+                school: selectedFilters.school,
+                areaOfStudy: selectedFilters.areaOfStudy,
+                program: selectedFilters.program,
+                english: selectedFilters.english,
+                gpa: selectedFilters.gpa,
+                gre: selectedFilters.gre,
+              }}
             />
 
-            <FilterDropdown
-              label="English"
+            <EnglishDropdown
               icon={<span>{filterIcons.english}</span>}
-              options={englishTestOptions}
-              onSelect={(value) => {
-                setSelectedFilters((p) => ({ ...p, english: value || "" }));
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              value={{
+                test: selectedFilters.english as any,
+                score: selectedFilters.englishScore
+                  ? Number(selectedFilters.englishScore)
+                  : undefined,
               }}
-              selectedValue={selectedFilters.english || ""}
-              buttonClassName="!py-1.5"
+              onChange={(v) =>
+                setSelectedFilters((p) => ({
+                  ...p,
+                  english: v.test,
+                  englishScore: v.score?.toString(),
+                }))
+              }
             />
 
-            <FilterDropdown
+            <GpaDropdown
               label="GPA"
               icon={<span>{filterIcons.gpa}</span>}
-              options={gpaOptions.map((v) => ({ value: v, label: v }))}
-              onSelect={(value) => {
-                setSelectedFilters((p) => ({ ...p, gpa: value || "" }));
-              }}
-              selectedValue={selectedFilters.gpa || ""}
-              buttonClassName="!py-1.5"
+              value={selectedFilters.gpa || ""} // مقدار فعلی
+              onChange={(v) =>
+                setSelectedFilters((p) => ({ ...p, gpa: v || "" }))
+              } // به state بریز
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
             />
 
             <FilterDropdown
@@ -1202,15 +1260,17 @@ const FindPrograms = () => {
                 setSelectedFilters((p) => ({ ...p, gre: value || "" }));
               }}
               selectedValue={selectedFilters.gre || ""}
-              buttonClassName="!py-1.5"
+              fixedWidthClass={FILTER_WIDTH}
+              buttonClassName={FILTER_BTN}
+              maxLabelChars={20}
             />
             {/* Apply (اعمال ۷ فیلتر) */}
-            <div className="flex items-center">
+            <div className="mt-3 flex justify-end ">
               <Button
                 type="button"
                 onClick={applyFilters}
                 disabled={!isApplyEnabled || isChatBusy}
-                className={`ml-2 ${
+                className={`ml-2 w-full ${
                   isApplyEnabled && !isChatBusy
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "opacity-50 cursor-not-allowed"
@@ -1252,336 +1312,27 @@ const FindPrograms = () => {
             {!loading && !noResults && programs.length > 0 && (
               <div className="space-y-6">
                 {programs.map((program, index) => (
-                  <AnimatedCard
+                  <ProgramResultCard
                     key={program.id}
-                    delay={0.2 + index * 0.1}
-                    className="border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 w-full"
-                  >
-                    <CardContent className="p-3 md:p-5 min-w-0">
-                      <div className="flex flex-col space-y-5 md:space-y-6 min-w-0">
-                        <div className="flex justify-between gap-3 min-w-0">
-                          <div className="flex items-start gap-3 md:gap-4 min-w-0">
-                            <motion.div
-                              whileHover={{ rotate: 5 }}
-                              transition={{ duration: 0.2 }}
-                              className="shrink-0"
-                            >
-                              <img
-                                src={program.schoolLogo}
-                                alt={`${program.school} logo`}
-                                className="w-12 h-12 md:w-16 md:h-16 object-contain bg-gray-100 dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700"
-                              />
-                            </motion.div>
-
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <h3 className="text-base md:text-xl font-semibold text-gray-900 dark:text-white text-nowrap">
-                                  {program.name}
-                                </h3>
-                                <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300  rounded-full  font-medium text-[11px] md:text-xs px-2 py-1">
-                                  {program.degreeType}
-                                </span>
-                                <span
-                                  className={cn(
-                                    " rounded-full  font-medium text-[11px] md:text-xs px-2 py-1",
-                                    program.fit === "High Fit"
-                                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                                      : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
-                                  )}
-                                >
-                                  {program.fit}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400 text-xs md:text-sm ">
-                                <span>{program.degree}</span>
-                                <span className="text-xs mx-1">•</span>
-                                <span className="truncate">
-                                  {program.school}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              aria-pressed={programsToCompare.includes(
-                                program.id
-                              )}
-                              className={`flex items-center gap-1 ${
-                                programsToCompare.includes(program.id)
-                                  ? "bg-green-900/20 text-green-400 border-green-800 hover:bg-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800/30 h-9 md:h-10 px-3 text-xs md:text-sm"
-                                  : "bg-blue-900/20 text-blue-400 border-blue-800 hover:bg-blue-800/30 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-800/30 h-9 md:h-10 px-3 text-xs md:text-sm"
-                              }`}
-                              onClick={() =>
-                                setProgramsToCompare((prev) =>
-                                  prev.includes(program.id)
-                                    ? prev.filter((x) => x !== program.id)
-                                    : [...prev, program.id]
-                                )
-                              }
-                            >
-                              {programsToCompare.includes(program.id) ? (
-                                <>
-                                  <Check className="h-4 w-4" />
-                                  Added
-                                </>
-                              ) : (
-                                <>
-                                  <GitCompare className="h-4 w-4" />
-                                  Compare
-                                </>
-                              )}
-                            </Button>
-                            <button
-                              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors h-9 w-9 md:h-10 md:w-10 rounded-md border flex items-center justify-center"
-                              onClick={() => toggleFavorite(program.id)}
-                              aria-label={
-                                favorites[program.id]
-                                  ? "Remove from favorites"
-                                  : "Add to favorites"
-                              }
-                            >
-                              {favorites[program.id] ? (
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-6 w-6 fill-red-500"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                </svg>
-                              ) : (
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-6 w-6"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 md:p-4 min-w-0">
-                            <h4 className=" font-medium text-gray-700 dark:text-gray-300  text-sm md:text-base  mb-2 md:mb-3">
-                              Program Features
-                            </h4>
-                            <div className="grid grid-cols-2 gap-2 md:gap-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 md:w-8 md:h-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-400">
-                                  🏆
-                                </div>
-                                <div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                                    QS Ranking
-                                  </div>
-                                  <div className="font-normal md:font-medium">
-                                    # {program.qsRanking}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
-                                  ⏱️
-                                </div>
-                                <div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                                    Duration
-                                  </div>
-                                  <div className="font-normal md:font-medium">
-                                    {program.duration}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400">
-                                  🏫
-                                </div>
-                                <div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                                    Campus
-                                  </div>
-                                  <div className="font-normal md:font-medium">
-                                    {program.campus}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 md:w-8 md:h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400">
-                                  🗣️
-                                </div>
-                                <div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                                    Language
-                                  </div>
-                                  <div className="font-normal md:font-medium">
-                                    {program.language}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg md:p-3 p-4 min-w-0">
-                            <h4 className="font-medium text-gray-700 dark:text-gray-300 text-sm md:text-base mb-2 md:mb-3">
-                              Application Deadline
-                            </h4>
-                            {program.deadline && program.deadline.length > 0 ? (
-                              <div className="flex flex-wrap justify-center gap-1.5 md:gap-2">
-                                {program.deadline.map((dl, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex flex-col items-center gap-1 p-2 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg shadow-sm"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-6 w-6 text-purple-500"
-                                      viewBox="0 0 20 20"
-                                      fill="currentColor"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
-                                    <div className="text-sm font-normal text-gray-800 dark:text-gray-200 text-center">
-                                      {dl.season}, {dl.date}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-2 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg shadow-sm">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-8 w-8 text-purple-500"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                                <div className="text-base font-bold text-gray-800 dark:text-gray-200">
-                                  No deadline
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  Application Deadline
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 md:p-4 min-w-0">
-                            <h4 className=" font-medium text-gray-700 dark:text-gray-300 text-sm md:text-base mb-2 md:mb-3">
-                              Requirements (Min)
-                            </h4>
-                            <div className="flex justify-center gap-2 md:gap-4">
-                              <StatCircle
-                                value={
-                                  (program as any)?.requirements?.[
-                                    selectedFilters.english
-                                      ? selectedFilters.english.toLowerCase()
-                                      : "toefl"
-                                  ]?.min
-                                }
-                                label={
-                                  selectedFilters.english
-                                    ? selectedFilters.english.toUpperCase()
-                                    : "TOEFL"
-                                }
-                                color="blue"
-                                isPercentage={false}
-                                size="lg"
-                                strokeWidth={4}
-                                className="shrink-0"
-                              />
-                              <StatCircle
-                                value={(program as any)?.requirements?.gpa?.min}
-                                label="GPA"
-                                color="green"
-                                isPercentage={false}
-                                size="lg"
-                                strokeWidth={4}
-                                className="shrink-0"
-                              />
-
-                              {/* GRE Status */}
-                              {(() => {
-                                const greRaw =
-                                  (program as any)?.requirements?.gre?.status ??
-                                  (program as any)?.requirements?.gre;
-
-                                const gre = normalizeGreStatus(greRaw);
-                                const style = getGREStatusStyle(gre);
-
-                                return (
-                                  <div className="flex flex-col items-center">
-                                    <div
-                                      className={`rounded-full w-20 h-20 flex items-center justify-center border-4 shadow-sm ${style.border} ${style.bg}`}
-                                    >
-                                      <span
-                                        className={`text-xl font-bold ${style.text}`}
-                                      >
-                                        {style.icon}
-                                      </span>
-                                    </div>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                                      GRE
-                                    </span>
-                                    <span
-                                      className={`text-xs ${style.text} font-medium`}
-                                    >
-                                      {gre}
-                                    </span>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row justify-end mt-2 gap-2 md:gap-3">
-                          <Button
-                            variant="outline"
-                            className="text-purple-600 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
-                            onClick={() => handleProgramInformation(program.id)}
-                          >
-                            Program Information
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            className={`${
-                              programList.includes(String(program.id))
-                                ? "bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:shadow-red-500/30 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
-                                : "bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:shadow-green-500/30 w-full sm:w-auto h-9 md:h-10 px-3 text-xs md:text-sm"
-                            }shadow-md hover:shadow-lg transition-all`}
-                            onClick={() =>
-                              toggleProgramInList(program.id, program.name)
-                            }
-                          >
-                            {programList.includes(String(program.id))
-                              ? "Remove from List"
-                              : "Add to List"}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </AnimatedCard>
+                    index={index}
+                    program={program}
+                    selectedEnglish={selectedFilters.english || "TOEFL"}
+                    isCompared={programsToCompare.includes(program.id)}
+                    isFavorite={!!favorites[program.id]}
+                    isInList={programList.includes(String(program.id))}
+                    onToggleCompare={(id) =>
+                      setProgramsToCompare((prev) =>
+                        prev.includes(id)
+                          ? prev.filter((x) => x !== id)
+                          : [...prev, id]
+                      )
+                    }
+                    onToggleFavorite={(id) => toggleFavorite(id)}
+                    onProgramInfo={(id) => handleProgramInformation(id)}
+                    onToggleList={(id, name) => toggleProgramInList(id, name)}
+                  />
                 ))}
+
                 {hasMore && programs.length > 0 && (
                   <div className="mt-8 flex justify-center">
                     <Button

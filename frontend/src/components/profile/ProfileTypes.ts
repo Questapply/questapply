@@ -26,11 +26,12 @@ export interface EducationData {
   major: string;
   gpa: string;
 }
-
+export type CountryOpt = { id: string; name: string; code?: string };
+export type Option = { id: string; name: string };
 export interface GoalsData {
-  country: string | { id: string; name: string };
+  country: "" | { id: string; name: string };
   level: string;
-  field: string | { id: string; name: string };
+  field: "" | { id: string; name: string };
   availableFields?: Array<{ id: string; name: string }>;
 }
 
@@ -72,4 +73,4 @@ export interface ProfileCompleteProps {
   onNext: (data: any) => void;
   profileData: StepData;
   applicationType: string;
-  
+}

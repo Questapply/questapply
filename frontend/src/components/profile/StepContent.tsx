@@ -77,7 +77,7 @@ const StepContent: React.FC<StepContentProps> = ({
     }
   }, [currentStep, applicationType]);
 
-  return <div>{renderStep()}</div>;
+  // return <div>{renderStep()}</div>;
 
   return <div className="w-full">{renderStep()}</div>;
 };

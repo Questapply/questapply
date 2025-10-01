@@ -1,10 +1,10 @@
 // lorApi.ts
 
 // از هر کدام که وجود داشت استفاده کن؛ در غیر این صورت localhost
-export const API_BASE =
+export const API_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
 
-export const LOR_BASE = `${API_BASE}/lor`;
+export const LOR_BASE = `${API_URL}/lor`;
 
 export function authHeaders() {
   const token = localStorage.getItem("token");

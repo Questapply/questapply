@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 import { Switch } from "../ui/switch";
@@ -26,12 +26,24 @@ const DashboardLayout = ({
   customHeaderButton,
 }: DashboardLayoutProps) => {
   const navigate = useNavigate();
+  const headerRef = useRef<HTMLDivElement>(null);
+  const scrollRootRef = useRef<HTMLDivElement>(null);
   const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
 
   useEffect(() => {
     // Randomly determine if we should show a feedback prompt (20% chance)
     const shouldShowPrompt = Math.random() < 0.2;
     setShowFeedbackPrompt(shouldShowPrompt);
+  }, []);
+  useLayoutEffect(() => {
+    const apply = () => {
+      const h = headerRef.current?.offsetHeight ?? 64;
+      // مقدار برای همهٔ صفحه در دسترس می‌شود
+      document.documentElement.style.setProperty("--top-nav-h", `${h}px`);
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
   }, []);
 
   const handleApplyWithUs = () => {
@@ -42,7 +54,7 @@ const DashboardLayout = ({
 
   return (
     <div
-      className={`flex min-h-screen w-full ${
+      className={`flex min-h-screen w-full  ${
         isDarkMode
           ? "bg-gradient-to-br from-gray-900 to-black"
           : "bg-gradient-to-br from-blue-50 to-teal-100"
@@ -55,16 +67,18 @@ const DashboardLayout = ({
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-auto">
+      <div className="flex-1 flex flex-col overflow-auto ">
         {/* Top Navigation */}
         <nav
+          ref={headerRef}
           className={`${
             isDarkMode ? "bg-gray-900/80" : "bg-white/80"
           } backdrop-blur-md border-b ${
             isDarkMode ? "border-blue-900/50" : "border-blue-100"
-          } p-4 sticky top-0 z-10`}
+          } p-4 md:fixed md:top-0 md:left-0 md:right-0 z-50`}
+          id="top-nav"
         >
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center ">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -140,7 +154,7 @@ const DashboardLayout = ({
         </nav>
 
         {/* Main Content Container */}
-        <div className="px-4  py-6 flex-1">
+        <div className="px-4 mt-20 py-6 flex-1">
           <div className="w-full">{children}</div>
         </div>
       </div>

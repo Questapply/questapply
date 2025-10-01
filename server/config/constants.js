@@ -13,27 +13,37 @@ export const IMAGE_PROXY_URL = (process.env.IMAGE_PROXY_URL || "").replace(
 export function buildUploadsUrl(raw = "") {
   if (!raw) return "";
 
-  const baseProto = new URL(BASE_UPLOADS_URL).protocol;
-  let absolute = raw;
+  const uploadsBase = String(BASE_UPLOADS_URL || "").replace(/\/+$/, "");
+  const baseProto = (() => {
+    try {
+      return new URL(uploadsBase).protocol;
+    } catch {
+      return "https:";
+    }
+  })();
 
   if (/^https?:\/\//i.test(raw)) {
     try {
       const u = new URL(raw);
-      if (u.hostname.includes("questapply.com")) {
-        u.protocol = baseProto;
-        absolute = u.toString();
-      }
+      u.protocol = baseProto;
+      const abs = u.toString();
+      return IMAGE_PROXY_URL
+        ? `${IMAGE_PROXY_URL}?url=${encodeURIComponent(abs)}`
+        : abs;
     } catch {}
-  } else if (raw.startsWith("/uploads/")) {
-    absolute = `${BASE_UPLOADS_URL}${raw.replace(/^\/uploads/, "")}`;
-  } else {
-    absolute = `${BASE_UPLOADS_URL}${raw.startsWith("/") ? raw : `/${raw}`}`;
   }
+
+  let rel = String(raw)
+    .trim()
+    .replace(/^\/?(wp-content\/uploads|uploads)\//i, "")
+    .replace(/^\/+/, "");
+  const absolute = `${uploadsBase}/${rel}`;
 
   return IMAGE_PROXY_URL
     ? `${IMAGE_PROXY_URL}?url=${encodeURIComponent(absolute)}`
     : absolute;
 }
+
 export const countryMap = {
   24: "United States",
   25: "Canada",

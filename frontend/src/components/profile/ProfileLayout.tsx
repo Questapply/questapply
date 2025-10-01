@@ -114,22 +114,17 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           : `Bearer ${token}`;
 
         // استفاده از آدرس کامل API
-        const apiUrl = `${API_URL}/user/profile-form`;
-
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: tokenToUse,
-            Accept: "application/json",
-          },
+        const profileRes = await fetch(`${API_URL}/user/profile-form`, {
+          headers: { Authorization: tokenToUse, Accept: "application/json" },
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API Error:", response.status, errorText);
-          throw new Error(`Failed to fetch profile data: ${response.status}`);
+        if (!profileRes.ok) {
+          const errorText = await profileRes.text();
+          console.error("API Error:", profileRes.status, errorText);
+          throw new Error(`Failed to fetch profile data: ${profileRes.status}`);
         }
 
-        const data = await response.json();
+        const data = await profileRes.json();
         console.log("ProfileLayout: Received profile data from API:", data); // **این لاگ مهم است**
         console.log(
           "ProfileLayout: isProfileComplete from API:",

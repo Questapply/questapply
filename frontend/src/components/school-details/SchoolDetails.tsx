@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import SchoolCardSkeleton from "../loading-skeleton/LoadingSkeleton";
 import { School as SchoolType } from "../entities/school/SchoolsData";
@@ -25,10 +25,28 @@ import SchoolIntroVideo from "./SchoolIntroVideo";
 import ProgramCategories from "./ProgramCategories";
 import RequirementsTable from "./RequirementsTable";
 import StudentDemographics from "./StudentDemographics";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+function extractYouTubeFromContent(html?: string | null): string | null {
+  if (!html) return null;
+
+  const mEmbed = html.match(/src="([^"]*youtube\.com\/embed\/[^"]+)"/i);
+  if (mEmbed?.[1]) return mEmbed[1];
+
+  const mWatch = html.match(
+    /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,})/i
+  );
+  if (mWatch?.[1]) return `https://www.youtube.com/embed/${mWatch[1]}`;
+
+  const mShort = html.match(
+    /https?:\/\/(?:www\.)?youtu\.be\/([A-Za-z0-9_-]{6,})/i
+  );
+  if (mShort?.[1]) return `https://www.youtube.com/embed/${mShort[1]}`;
+
+  return null;
+}
 
 type Item = { title: string; programId: number };
-
 type FilterDropdownProps = {
   items?: Item[];
   onSelect: (programId: number) => void;
@@ -37,6 +55,37 @@ type FilterDropdownProps = {
   disabled?: boolean;
   initialValue?: number | null;
 };
+
+// --- LEVEL NORMALIZATION HELPERS ---
+type LevelName = "Master" | "Ph.D." | "Bachelor";
+
+const NBSP = /\u00A0/g;
+const norm = (s?: string) => (s || "").replace(NBSP, " ").trim();
+
+const mapLevel = (raw?: string): LevelName | null => {
+  const l = norm(raw);
+
+  // Master
+  if (/^masters?$/i.test(l)) return "Master";
+
+  // Ph.D.  (PhD | Ph . D | Ph.D | phd | PHD)
+  if (/^ph\.?\s*d\.?$/i.test(l) || /^phd$/i.test(l)) return "Ph.D.";
+
+  // Bachelor (Bachelor | Bachelors | Bachelor’s | Bachelor's)
+  if (/^bachelors?$/i.test(l) || /^bachelor[’']s$/i.test(l)) return "Bachelor";
+
+  return null;
+};
+
+// فالو-بک از school.programs مثل ["Master: 13 Programs", ...]
+const countFromPrograms = (arr?: string[], key?: LevelName) => {
+  if (!Array.isArray(arr) || !key) return 0;
+  const row = arr.find((s) => s.startsWith(`${key}:`));
+  if (!row) return 0;
+  const m = row.match(/:\s*(\d+)\s+Programs/i);
+  return m ? +m[1] : 0;
+};
+
 //  Dropdown
 function FilterDropdown({
   items = [],
@@ -283,15 +332,15 @@ const LevelCard = ({
 }) => {
   const color =
     level === "Master"
-      ? "text-blue-300"
+      ? "text-blue-400 dark:text-blue-300"
       : level === "Ph.D."
-      ? "text-emerald-300"
+      ? "txt-emeraid-400 dark:text-emerald-300"
       : "text-amber-300";
 
   const navigate = useNavigate();
 
   return (
-    <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-5">
+    <div className="dark:bg-gray-900/40 border border-gray-800 rounded-xl p-5 bg-white">
       <div className={`text-sm ${color}`}>{level}</div>
       <div className="mt-1 text-2xl font-extrabold text-blue-600 dark:text-blue-400">
         {total.toLocaleString()} <span className="font-semibold">Programs</span>
@@ -304,11 +353,13 @@ const LevelCard = ({
               key={`${level}-top-${idx}`}
               className="flex items-center justify-between text-sm"
             >
-              <span className="text-gray-300 truncate">{it.title}</span>
+              <span className="dark:text-gray-300 text-gray-500 truncate">
+                {it.title}
+              </span>
               <button
                 type="button"
-                onClick={() => navigate(`/program/${it.programId}`)}
-                className="px-2 py-0.5 rounded-md border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 transition"
+                onClick={() => navigate(`/dashboard/programs/${it.programId}`)}
+                className="px-2 py-0.5 rounded-md border border-gray-700 text-gray-500  dark:text-gray-300 hover:text-white hover:border-gray-500 transition"
               >
                 View
               </button>
@@ -322,7 +373,7 @@ const LevelCard = ({
       <FilterDropdown
         items={levelPrograms ?? []}
         placeholder="View All Programs"
-        onSelect={(pid) => navigate(`/program/${pid}`)}
+        onSelect={(pid) => navigate(`/dashboard/programs/${pid}`)}
       />
     </div>
   );
@@ -342,7 +393,6 @@ const Stat = ({
     </div>
   </div>
 );
-type LevelName = "Master" | "Ph.D." | "Bachelor";
 
 type ProgramListItem = {
   title: string;
@@ -375,6 +425,7 @@ type SchoolDetailsProps = {
   onToggleTheme?: () => void;
   // هر چی قبلاً داشتی اینجا بیار
 };
+
 //School Details
 const SchoolDetails = ({
   isDarkMode = document.documentElement.classList.contains("dark"),
@@ -391,28 +442,14 @@ const SchoolDetails = ({
     programList: ProgramListItem[];
     deadlines?: Deadlines;
   } | null>(null);
+  const [activeRowId, setActiveRowId] = useState<number | null>(null);
   const [progLoading, setProgLoading] = useState(false);
   const [progError, setProgError] = useState<string | null>(null);
+
   const { toast } = useToast();
+  const location = useLocation();
 
   const navigate = useNavigate();
-  const programsByLevel = useMemo(() => {
-    const buckets: Record<
-      LevelName,
-      Array<{ title: string; programId: number }>
-    > = {
-      Master: [],
-      "Ph.D.": [],
-      Bachelor: [],
-    };
-    for (const p of progData?.programList ?? []) {
-      const lvl = p.level as LevelName;
-      if (buckets[lvl]) {
-        buckets[lvl].push({ title: p.title, programId: p.programId });
-      }
-    }
-    return buckets;
-  }, [progData?.programList]);
 
   useEffect(() => {
     const fetchSchool = async () => {
@@ -423,15 +460,12 @@ const SchoolDetails = ({
           navigate("/auth?mode=login");
           return;
         }
-        const response = await fetch(
-          `${API_URL}/school/${schoolId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const response = await fetch(`${API_URL}/school/${schoolId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
 
         if (!response.ok) {
           console.log("API error:", response.status, response.statusText);
@@ -445,7 +479,7 @@ const SchoolDetails = ({
 
         const data = await response.json();
         console.log("School detailes:", data);
-        console.log("Fetched school data:", data);
+
         setSchool({ ...data, favorite: false });
         setLoading(false);
       } catch (error) {
@@ -459,6 +493,12 @@ const SchoolDetails = ({
   }, [schoolId, navigate]);
 
   useEffect(() => {
+    const qs = new URLSearchParams(location.search);
+    const rel = Number(qs.get("relId") || "");
+    if (rel && Number.isFinite(rel)) setActiveRowId(rel);
+  }, [location.search]);
+
+  useEffect(() => {
     if (!school?.id && !schoolId) return;
     const sid = school?.id ?? schoolId;
     const token = localStorage.getItem("token");
@@ -466,39 +506,107 @@ const SchoolDetails = ({
     setProgLoading(true);
     setProgError(null);
 
-    fetch(
-      `${API_URL}/program-data/program-list?schoolId=${sid}&limit=1000`,
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }
-    )
+    fetch(`${API_URL}/program-data/program-list?schoolId=${sid}&limit=1000`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
-
-        if (!data?.byLevel) throw new Error("Invalid shape");
-        const { byLevel, programList, deadlines } = data as {
+        console.log("Detile School:", data);
+        if (!data?.byLevel || !Array.isArray(data?.programList))
+          throw new Error("Invalid shape");
+        const { byLevel, programList } = data as {
           byLevel: ByLevel;
-          programList: ProgramListItem[];
-          deadlines?: Deadlines;
+          programList: any[];
         };
         setProgData({
           byLevel,
           programList,
-
-          deadlines,
         });
+        if (!activeRowId && programList.length) {
+          const first = programList[0];
+          if (first?.rowId) setActiveRowId(Number(first.rowId));
+        }
       })
       .catch((err) => setProgError(err.message || "Failed to load programs"))
       .finally(() => setProgLoading(false));
-  }, [school?.id, schoolId]);
+  }, [school?.id, schoolId, activeRowId]);
 
-  const deadlines: Deadlines = progData?.deadlines ?? {
-    fall: null,
-    winter: null,
-    spring: null,
-    summer: null,
+  const grouped = useMemo(() => {
+    const by: Record<
+      LevelName,
+      { items: Array<{ title: string; programId: number }>; total: number }
+    > = {
+      Master: { items: [], total: 0 },
+      "Ph.D.": { items: [], total: 0 },
+      Bachelor: { items: [], total: 0 },
+    };
+
+    for (const p of progData?.programList ?? []) {
+      const key = mapLevel((p as any).level);
+      if (!key) continue;
+      by[key].items.push({ title: p.title, programId: p.programId });
+      by[key].total++;
+    }
+
+    return by;
+  }, [progData?.programList]);
+
+  const programsByLevel = {
+    Master: grouped.Master.items,
+    "Ph.D.": grouped["Ph.D."].items,
+    Bachelor: grouped.Bachelor.items,
   };
+
+  const totals = {
+    Master: grouped.Master.total,
+    "Ph.D.": grouped["Ph.D."].total,
+    Bachelor: grouped.Bachelor.total,
+  };
+
+  const serverPrograms: string[] | undefined = Array.isArray(
+    (school as any)?.programs
+  )
+    ? ((school as any).programs as string[])
+    : undefined;
+
+  const safeTotals = {
+    Master: totals.Master || countFromPrograms(serverPrograms, "Master") || 0,
+    "Ph.D.": totals["Ph.D."] || countFromPrograms(serverPrograms, "Ph.D.") || 0,
+    Bachelor:
+      totals.Bachelor || countFromPrograms(serverPrograms, "Bachelor") || 0,
+  };
+
+  function toDeadlinesObject(item: any): Deadlines {
+    const base: Deadlines = {
+      fall: null,
+      winter: null,
+      spring: null,
+      summer: null,
+    };
+    if (!item?.deadline || !Array.isArray(item.deadline)) return base;
+    const map: Record<string, keyof Deadlines> = {
+      Fall: "fall",
+      Winter: "winter",
+      Spring: "spring",
+      Summer: "summer",
+    };
+    for (const d of item.deadline) {
+      const k = d?.season && map[d.season];
+      if (k) (base as any)[k] = d.date || null;
+    }
+    return base;
+  }
+  const deadlines: Deadlines = useMemo(() => {
+    const list: any[] = progData?.programList || [];
+    if (!list.length)
+      return { fall: null, winter: null, spring: null, summer: null };
+    const picked =
+      (activeRowId &&
+        list.find((x) => Number(x?.rowId) === Number(activeRowId))) ||
+      list[0];
+    return toDeadlinesObject(picked);
+  }, [progData?.programList, activeRowId]);
 
   function formatDeadlineLabel(iso: string | null) {
     if (!iso) return "—";
@@ -531,17 +639,14 @@ const SchoolDetails = ({
       setIsFavorite(!isFavorite);
 
       // Then send request to server
-      const response = await fetch(
-        `${API_URL}/favorites/schools`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ schoolId: school.id, action }),
-        }
-      );
+      const response = await fetch(`${API_URL}/favorites/schools`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ schoolId: school.id, action }),
+      });
 
       if (!response.ok) {
         // If the request failed, revert the UI change
@@ -743,23 +848,6 @@ const SchoolDetails = ({
             transition={{ duration: 0.5 }}
             className="flex space-x-3 mt-4 md:mt-0"
           >
-            <div className="flex items-center space-x-2">
-              <Sun
-                className={`w-5 h-5 ${
-                  isDarkMode ? "text-gray-400" : "text-yellow-500"
-                }`}
-              />
-              <Switch
-                checked={isDarkMode}
-                onCheckedChange={onToggleTheme}
-                className="data-[state=checked]:bg-blue-600"
-              />
-              <Moon
-                className={`w-5 h-5 ${
-                  isDarkMode ? "text-blue-400" : "text-gray-400"
-                }`}
-              />
-            </div>
             <Button
               variant="outline"
               className="flex items-center gap-1"
@@ -927,7 +1015,13 @@ const SchoolDetails = ({
             </TabsList>
             <TabsContent value="overview">
               {/* Add School Intro Video */}
-              <SchoolIntroVideo schoolName={school.name} />
+              <SchoolIntroVideo
+                schoolName={school.name}
+                videoUrl={
+                  extractYouTubeFromContent((school as any).content) ||
+                  undefined
+                }
+              />
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
@@ -1034,26 +1128,29 @@ const SchoolDetails = ({
                         <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                           Student Population
                         </h4>
+
                         <p className="text-lg font-medium text-gray-800 dark:text-gray-200">
-                          {school.studentDemographics?.total.toLocaleString() ||
-                            "21,000+"}
+                          {formatNumber(
+                            (school as any).students?.total ??
+                              ((school as any).students?.men ?? 0) +
+                                ((school as any).students?.women ?? 0)
+                          )}
                         </p>
+
                         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           <span>
                             Undergraduate:{" "}
-                            {school.studentDemographics?.level?.undergraduate.toLocaleString() ||
-                              "6,700"}
+                            {formatNumber((school as any).students?.undergrad)}
                           </span>
                           <span className="mx-1">|</span>
                           <span>
                             Graduate:{" "}
-                            {school.studentDemographics?.level?.graduate.toLocaleString() ||
-                              "14,300"}
+                            {formatNumber((school as any).students?.graduate)}
                           </span>
                         </div>
                       </div>
 
-                      <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg">
+                      {/* <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg">
                         <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                           Campus Size
                         </h4>
@@ -1063,74 +1160,17 @@ const SchoolDetails = ({
                         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           <span>Urban campus setting</span>
                         </div>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
               </div>
             </TabsContent>
-            {/* <TabsContent value="programs">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex items-center">
-                  <Book className="h-5 w-5 text-blue-500 mr-2" />
-                  <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-                    Academic Programs
-                  </h2>
-                </div>
-
-                {progLoading ? (
-                  <div className="p-6 text-sm text-gray-500">
-                    Loading programs…
-                  </div>
-                ) : progError ? (
-                  <div className="p-6 text-sm text-red-400">
-                    Failed to load programs: {progError}
-                  </div>
-                ) : progData ? (
-                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <LevelCard
-                      level="Master"
-                      total={progData.byLevel.Master?.total || 0}
-                      top3={progData.byLevel.Master?.top3 || []}
-                      schoolId={school?.id ?? schoolId}
-                      levelPrograms={programsByLevel.Master.map((p) => ({
-                        title: p.title,
-                        programId: p.programId,
-                      }))}
-                    />
-                    <LevelCard
-                      level="Ph.D."
-                      total={progData.byLevel["Ph.D."]?.total || 0}
-                      top3={progData.byLevel["Ph.D."]?.top3 || []}
-                      schoolId={school?.id ?? schoolId}
-                      levelPrograms={programsByLevel["Ph.D."].map((p) => ({
-                        title: p.title,
-                        programId: p.programId,
-                      }))}
-                    />
-                    <LevelCard
-                      level="Bachelor"
-                      total={progData.byLevel.Bachelor?.total || 0}
-                      top3={progData.byLevel.Bachelor?.top3 || []}
-                      schoolId={school?.id ?? schoolId}
-                      levelPrograms={programsByLevel.Bachelor.map((p) => ({
-                        title: p.title,
-                        programId: p.programId,
-                      }))}
-                    />
-                  </div>
-                ) : (
-                  <div className="p-6 text-sm text-gray-500">
-                    No program data.
-                  </div>
-                )}
-              </div>
-            </TabsContent> */}
 
             {/* new TabsContent program */}
             <TabsContent value="programs">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex items-center">
+                <div className="px-6 py-4 bg-gray-100 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex items-center">
                   <Book className="h-5 w-5 text-blue-500 mr-2" />
                   <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
                     Academic Programs
@@ -1146,7 +1186,7 @@ const SchoolDetails = ({
                     Failed to load programs: {progError}
                   </div>
                 ) : progData ? (
-                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 ">
                     <LevelCard
                       level="Master"
                       total={progData.byLevel.Master?.total || 0}
@@ -1167,7 +1207,7 @@ const SchoolDetails = ({
                     />
                     <LevelCard
                       level="Bachelor"
-                      total={progData.byLevel.Bachelor?.total || 0}
+                      total={safeTotals.Bachelor}
                       top3={progData.byLevel.Bachelor?.top3 || []}
                       schoolId={school?.id ?? schoolId}
                       levelPrograms={(programsByLevel.Bachelor ?? []).map(
@@ -1208,9 +1248,6 @@ const SchoolDetails = ({
                                 <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                   QS World Rankings
                                 </h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  2023
-                                </p>
                               </div>
                             </div>
                             <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
@@ -1229,9 +1266,6 @@ const SchoolDetails = ({
                                 <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                   Shanghai Rankings
                                 </h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  2023
-                                </p>
                               </div>
                             </div>
                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
@@ -1250,9 +1284,6 @@ const SchoolDetails = ({
                                 <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                   Times Higher Education
                                 </h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  2023
-                                </p>
                               </div>
                             </div>
                             <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
@@ -1278,9 +1309,6 @@ const SchoolDetails = ({
                                 <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                   US News Rankings
                                 </h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  2023
-                                </p>
                               </div>
                             </div>
                             <div className="text-2xl font-bold text-red-600 dark:text-red-400">
@@ -1299,9 +1327,6 @@ const SchoolDetails = ({
                                 <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                   Forbes Rankings
                                 </h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  2023
-                                </p>
                               </div>
                             </div>
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
@@ -1343,7 +1368,7 @@ const SchoolDetails = ({
 
                             <div className="p-4 space-y-3">
                               {/* Undergrade */}
-                              <div className="rounded-lg bg-gray-50 bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
+                              <div className="rounded-lg bg-gray-50  dark:bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
                                 <div className="flex items-baseline justify-between">
                                   <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                                     Undergrade · Totals
@@ -1369,7 +1394,7 @@ const SchoolDetails = ({
                               </div>
 
                               {/* Graduate */}
-                              <div className="rounded-lg bg-gray-50 bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
+                              <div className="rounded-lg bg-gray-50 dark:bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
                                 <div className="flex items-baseline justify-between">
                                   <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                                     Graduate · Totals
@@ -1406,7 +1431,7 @@ const SchoolDetails = ({
 
                             <div className="p-4 space-y-3">
                               {/* Undergrade */}
-                              <div className="rounded-lg bg-gray-50 bg-gray-900/50 p-3 border border-gray-200 dark:border-neutral-800">
+                              <div className="rounded-lg bg-gray-50 dark:bg-gray-900/50 p-3 border border-gray-200 dark:border-neutral-800">
                                 <div className="flex items-baseline justify-between">
                                   <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                                     Undergrade · Totals
@@ -1432,7 +1457,7 @@ const SchoolDetails = ({
                               </div>
 
                               {/* Graduate */}
-                              <div className="rounded-lg bg-gray-50 bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
+                              <div className="rounded-lg bg-gray-50 dark:bg-gray-900/60 p-3 border border-gray-200 dark:border-neutral-800">
                                 <div className="flex items-baseline justify-between">
                                   <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                                     Graduate · Totals
@@ -1587,7 +1612,7 @@ const SchoolDetails = ({
                                         : "bg-red-100 text-red-700 dark:bg-red-700/50 dark:text-red-300")
                                     }
                                   >
-                                    {isTrue ? "Required" : "Not required"}
+                                    {isTrue ? "ََAccepted" : "Not required"}
                                   </span>
                                 </div>
                               );

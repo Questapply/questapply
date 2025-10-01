@@ -34,7 +34,7 @@ import ChatHistory, { ChatMessage } from "../chat/ChatHistory";
 import ChatComposer from "../chat/ChatComposer";
 import ResultsColumn from "../chat/ResultsColumn";
 import type { SessionMeta } from "../chat/storage";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 type FiltersState = {
   country?: string;
@@ -109,6 +109,8 @@ const mapFiltersToApiParams = (
   return out;
 };
 const PAGE_ID = "find-schools";
+const FILTER_WIDTH = "w-[150px] sm:w-[180px] md:w-[260px]";
+const FILTER_BTN = "truncate";
 
 const FindSchools = () => {
   const [schools, setSchools] = useState<School[]>([]);
@@ -405,16 +407,13 @@ const FindSchools = () => {
     setLoadingStates(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(
-        `${API_URL}/states?country=${countryId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const res = await fetch(`${API_URL}/states?country=${countryId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!res.ok) {
         setAvailableStates([]);
         setLoadingStates(false);
@@ -493,16 +492,13 @@ const FindSchools = () => {
         params.append("limit", "200");
         if (countryId) params.append("country", String(countryId));
         if (stateId) params.append("state", String(stateId));
-        const res = await fetch(
-          `${API_URL}/schools?${params.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const res = await fetch(`${API_URL}/schools?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
         if (!res.ok) {
           setAvailableSchoolsForDropdown([]);
           setLoadingSchoolsForDropdown(false);
@@ -781,7 +777,9 @@ const FindSchools = () => {
         if (!res.ok) throw new Error("Failed to update favorites");
         setFavorites((prev) => ({ ...prev, [schoolId]: !isFav }));
         toast({
-          title: isFav ? "Removed from favorites" : "Added to favorites",
+          title: isFav
+            ? "This school  removed from your My Favorites."
+            : "This school  added to your My Favorites.",
           description: "",
         });
       } catch {
@@ -794,15 +792,32 @@ const FindSchools = () => {
     },
     [favorites, toast]
   );
+  const handleCompare = useCallback(
+    (schoolId: number, checked: boolean) => {
+      setSchoolsToCompare((prev) => {
+        const set = new Set(prev);
+        if (checked) set.add(schoolId);
+        else set.delete(schoolId);
 
-  const handleCompare = useCallback((schoolId: number, checked: boolean) => {
-    setSchoolsToCompare((prev) => {
-      const set = new Set(prev);
-      if (checked) set.add(schoolId);
-      else set.delete(schoolId);
-      return Array.from(set);
-    });
-  }, []);
+        const arr = Array.from(set);
+
+        // پیام‌های راهنما
+        if (checked && arr.length === 1) {
+          toast({
+            title: "1 school selected",
+            description: "Select one more to compare.",
+          });
+        } else if (checked && arr.length >= 2) {
+          toast({
+            title: "Ready to compare",
+            description: "Tap the floating “Compare” button below.",
+          });
+        }
+        return arr;
+      });
+    },
+    [toast]
+  );
 
   const isApplyEnabled = useMemo(() => {
     return Boolean(
@@ -886,7 +901,7 @@ const FindSchools = () => {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
-          {schoolsToCompare.length > 0 && (
+          {schoolsToCompare.length >= 2 && (
             <Button
               variant="secondary"
               className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -906,7 +921,7 @@ const FindSchools = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-4 mb-6">
-        <div className="flex items-center gap-2 mb-4s">
+        <div className="flex items-center gap-2 mb-4">
           <svg
             width="16"
             height="16"
@@ -924,7 +939,12 @@ const FindSchools = () => {
           </svg>
           <h2 className="text-lg font-semibold">Filters</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div
+          className="grid
+    grid-cols-[repeat(2,max-content)]
+    md:grid-cols-[repeat(4,max-content)]
+    gap-2 md:gap-6 justify-center"
+        >
           {/* Country (single) */}
           <FilterDropdown
             label="Country"
@@ -933,7 +953,9 @@ const FindSchools = () => {
             onSelect={onCountrySelect}
             selectedValue={selectedFilters.country || ""}
             selectedLabel={selectedCountryLabel}
-            buttonClassName="!py-1.5"
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* State (multi) — بonSelect (toggle) */}
@@ -947,12 +969,14 @@ const FindSchools = () => {
             onChange={(vals) =>
               handleMultiFilterChange("state", vals as string[])
             }
-            buttonClassName="!py-1.5"
             disabled={
               loadingStates ||
               !selectedFilters.country ||
               availableStates.length === 0
             }
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* School (single) */}
@@ -963,12 +987,14 @@ const FindSchools = () => {
             onSelect={(value) => handleFilterChange("school", value)}
             selectedValue={selectedFilters.school || ""}
             selectedLabel={selectedSchoolLabel}
-            buttonClassName="!py-1.5"
             disabled={
               loadingSchoolsForDropdown ||
               !selectedFilters.country ||
               availableSchoolsForDropdown.length === 0
             }
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* Degree Level (single) */}
@@ -979,7 +1005,9 @@ const FindSchools = () => {
             onSelect={(value) => handleFilterChange("degreeLevel", value)}
             selectedValue={selectedFilters.degreeLevel || ""}
             selectedLabel={selectedDegreeLevelLabel}
-            buttonClassName="!py-1.5"
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* Area of Study (multi) — userPreferences */}
@@ -993,7 +1021,9 @@ const FindSchools = () => {
             onChange={(vals) =>
               handleMultiFilterChange("areaOfStudy", vals as string[])
             }
-            buttonClassName="!py-1.5"
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* Program (multi) — userPreferences */}
@@ -1007,7 +1037,6 @@ const FindSchools = () => {
             onChange={(vals) =>
               handleMultiFilterChange("program", vals as string[])
             }
-            buttonClassName="!py-1.5"
             disabled={
               loadingPrograms ||
               !(
@@ -1017,6 +1046,9 @@ const FindSchools = () => {
               !selectedFilters.degreeLevel ||
               availablePrograms.length === 0
             }
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* Order By (single) */}
@@ -1027,16 +1059,18 @@ const FindSchools = () => {
             onSelect={(value) => handleFilterChange("orderBy", value)}
             selectedValue={selectedFilters.orderBy || "qs_rank"}
             selectedLabel={selectedOrderByLabel || "QS Ranking"}
-            buttonClassName="!py-1.5"
+            fixedWidthClass={FILTER_WIDTH}
+            buttonClassName={FILTER_BTN}
+            maxLabelChars={20}
           />
 
           {/* Apply */}
-          <div className="flex items-center">
+          <div className="mt-3 flex justify-end ">
             <Button
               type="button"
               onClick={applyFilters}
               disabled={!isApplyEnabled || isChatBusy}
-              className={`ml-2 ${
+              className={`ml-2 w-full ${
                 isApplyEnabled && !isChatBusy
                   ? "bg-blue-600 hover:bg-blue-700 text-white"
                   : "opacity-50 cursor-not-allowed"
@@ -1054,27 +1088,14 @@ const FindSchools = () => {
         results={[
           <ResultsColumn
             key="results-main"
-            // اختیاری:
             // title="Results"
             padded={false}
             className="p-0"
-            emptyState={
-              <div className="text-muted-foreground">No results to display</div>
-            }
           >
-            {noSchoolsFound && schools.length === 0 && (
-              <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                  No Schools Found
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  No schools match your current filter criteria. Try adjusting
-                  your filters and press Apply.
-                </p>
-              </div>
-            )}
-
-            {!loading && (schools.length > 0 || noSchoolsFound) ? (
+            {loading ? (
+              // فقط اسکلت لودینگ (کامپوننت خودت)
+              <LoadingSkeleton />
+            ) : schools.length > 0 ? (
               <div className="space-y-6">
                 {schools.map((school, index) => (
                   <SchoolCard
@@ -1107,15 +1128,7 @@ const FindSchools = () => {
                   </div>
                 )}
               </div>
-            ) : (
-              loading &&
-              schools.length === 0 &&
-              !noSchoolsFound && (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-              )
-            )}
+            ) : null}
           </ResultsColumn>,
         ]}
         layout={{
@@ -1135,6 +1148,31 @@ const FindSchools = () => {
           distributeCardWhitespace: true,
         }}
       />
+      {/* Floating Compare CTA */}
+      {schoolsToCompare.length >= 2 && (
+        <div className="fixed bottom-8 right-6 z-50">
+          <Button
+            onClick={() =>
+              navigate(
+                `/dashboard/compare/schools/${encodeURIComponent(
+                  schoolsToCompare.join(",")
+                )}`
+              )
+            }
+            className="
+        rounded-lg px-5 py-3 text-white
+        bg-blue-600 hover:bg-blue-700
+        shadow-lg ring-1 ring-blue-300/50
+        animate-[pulse_1.4s_ease-in-out_infinite]
+
+        dark:bg-blue-600 dark:hover:bg-blue-400
+        dark:shadow-blue-500/30 dark:ring-2 dark:ring-blue-400/60
+      "
+          >
+            Compare Selected ({schoolsToCompare.length})
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

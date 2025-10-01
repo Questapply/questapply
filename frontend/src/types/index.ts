@@ -1,42 +1,3 @@
-// export interface UserPreferences {
-//   country: string | { id: string | number; name: string } | null;
-//   level: string | null;
-//   program: string | null;
-//   areaOfStudy: {
-//     id: string;
-//     name: string;
-//   } | null;
-//   programDetails?: {
-//     id: string;
-//     name: string;
-//   };
-//   countryDetails?: {
-//     id: string;
-//     name: string;
-//     states?: Array<{
-//       id: string;
-//       name: string;
-//     }>;
-//   };
-//   availableCountries?: Array<{
-//     id: string | number;
-//     name: string;
-//   }>;
-//   availableAreasOfStudy?: Array<{
-//     id: string;
-//     name: string;
-//   }>;
-//   availablePrograms?: Array<{
-//     id: string;
-//     name: string;
-//   }>;
-//   appliedFilters?: {
-//     country: boolean;
-//     level: boolean;
-//     areaOfStudy: boolean;
-//     program: boolean;
-//   };
-// }
 export interface UserPreferences {
   country: string | { id: string | number; name: string } | null;
   level: string | null;
@@ -60,10 +21,7 @@ export interface UserPreferences {
   englishTest?: string | null; // Add this
   englishScore?: string | null; // Add this
   gpa?: string | null; // Add this
-  availableCountries?: Array<{
-    id: string | number;
-    name: string;
-  }>;
+
   availableAreasOfStudy?: Array<{
     id: string;
     name: string;
@@ -78,6 +36,10 @@ export interface UserPreferences {
     areaOfStudy: boolean;
     program: boolean;
   };
+  availableCountries?: Array<{
+    country: string | number; // قبلاً: id
+    name: string;
+  }>;
 }
 
 export interface FilterOption {

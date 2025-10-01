@@ -191,13 +191,6 @@ export const professorTitleOptions = [
   "Assistant Professor",
   "Associate Professor",
   "Professor",
-  "Distinguished Professor",
-  "Emeritus Professor",
-  "Adjunct Professor",
-  "Research Professor",
-  "Clinical Professor",
-  "Visiting Professor",
-  "Lecturer",
 ];
 
 // Filter icons mapping

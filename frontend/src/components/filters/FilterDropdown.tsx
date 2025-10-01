@@ -44,7 +44,16 @@ type Props = {
   onOpen?: () => void;
   onSearch?: (searchText: string) => void;
   debugLabel?: string;
+
+  // Siz filter
+  containerClassName?: string;
+  pillClassName?: string;
+  fixedWidthClass?: string;
+  maxLabelChars?: number;
 };
+
+const clamp = (s?: string, n = 20) =>
+  (s?.trim()?.length || 0) > n ? `${s!.trim().slice(0, n)}…` : s || "";
 
 function normalizeOptions(options: FDOption[]) {
   return options.map((o) =>
@@ -89,6 +98,10 @@ const FilterDropdown: React.FC<Props> = ({
   onOpen,
   onSearch,
   debugLabel,
+  containerClassName,
+  pillClassName,
+  fixedWidthClass,
+  maxLabelChars = 20,
 }) => {
   const isMulti = !!multiple;
   const [isOpen, setIsOpen] = useState(false);
@@ -131,11 +144,20 @@ const FilterDropdown: React.FC<Props> = ({
   }, [isMulti, selectedValues, normalizedOptions]);
 
   const buttonLabel = useMemo(() => {
-    if (isMulti) {
-      return selectionCount > 0 ? firstSelectedLabel || label : label;
-    }
-    return singleLabel;
-  }, [isMulti, selectionCount, label, firstSelectedLabel, singleLabel]);
+    const raw = isMulti
+      ? selectionCount > 0
+        ? firstSelectedLabel || label
+        : label
+      : singleLabel;
+    return clamp(raw, maxLabelChars);
+  }, [
+    isMulti,
+    selectionCount,
+    label,
+    firstSelectedLabel,
+    singleLabel,
+    maxLabelChars,
+  ]);
 
   // فیلتر جستجو
   const filtered = useMemo(() => {
@@ -181,7 +203,7 @@ const FilterDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className={cn(className)}>
+    <div className={cn("inline-block", fixedWidthClass, containerClassName)}>
       <DropdownMenu open={isOpen && !disabled} onOpenChange={handleOpen}>
         <div
           className={cn(
@@ -191,7 +213,8 @@ const FilterDropdown: React.FC<Props> = ({
               : selectionCount > 0
               ? activePill
               : idlePill,
-            className
+            "w-full",
+            pillClassName
           )}
         >
           <DropdownMenuTrigger asChild disabled={disabled}>
@@ -199,8 +222,9 @@ const FilterDropdown: React.FC<Props> = ({
               type="button"
               whileHover={disabled ? {} : { y: -3 }}
               className={cn(
-                "flex items-center gap-2  truncate text-inherit",
+                "flex items-center gap-2 text-center  truncate text-inherit w-full",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40 rounded-full",
+                "h-7 md:h-8 !py-0 px-3",
                 buttonClassName
               )}
             >

@@ -15,9 +15,8 @@ export default function Dashboard({ isDarkMode, toggleTheme }: Props) {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
+      {/* نوار تب‌ها */}
       <div className="w-full max-w-full">
-        {/* نوار تب‌ها */}
-
         <NavigationButtons isDarkMode={isDarkMode} />
 
         {/* محتوای صفحه‌های تب (FindSchools, FindPrograms, ...) */}

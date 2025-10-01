@@ -18,6 +18,50 @@ import { buildUploadsUrl } from "../config/constants.js";
 
 const router = express.Router();
 
+// Helper: CSV parser
+const parseCsv = (v) =>
+  typeof v === "string"
+    ? v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : Array.isArray(v)
+    ? v.map(String)
+    : [];
+
+const seasonColMap = {
+  fall: "deadline_fall",
+  winter: "deadline_winter",
+  spring: "deadline_spring",
+  summer: "deadline_summer",
+};
+
+// نام ماه → شماره ماه (1..12)
+const monthNameToNum = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+const parseMonthsFlexible = (input) => {
+  if (!input) return [];
+  const flat = Array.isArray(input) ? input.join(",") : String(input);
+  return flat
+    .split(",")
+    .map((s) => s.trim())
+    .map((s) => (/^\d+$/.test(s) ? Number(s) : monthNameToNum[s.toLowerCase()]))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 12);
+};
+
 //API endpoint details program
 router.get("/details/:id", async (req, res) => {
   try {
@@ -701,17 +745,6 @@ router.get("/find", async (req, res) => {
 
     const { email } = req.user;
 
-    // Helper: CSV parser
-    const parseCsv = (v) =>
-      typeof v === "string"
-        ? v
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : Array.isArray(v)
-        ? v.map(String)
-        : [];
-
     // -------- Preload user + lookups (+ states for mapping id->name) --------
     const [
       userDataResult,
@@ -907,8 +940,14 @@ router.get("/find", async (req, res) => {
       school: req.query.school || null,
       gre: req.query.gre || null,
       deadline: req.query.deadline || null,
-      orderBy: req.query.orderBy || null, // (فعلاً صرفاً QS در آخر اعمال می‌شود)
+      orderBy: req.query.orderBy || null,
     };
+    const deadlineRaw = (req.query.deadline || "").toString(); // "fall" یا "Fall"
+    const deadlineKey = deadlineRaw.toLowerCase(); // "fall"
+    const deadlineCol = seasonColMap[deadlineKey]; // 'deadline_fall' | undefined
+    const monthNums = parseMonthsFlexible(
+      req.query.select_month || req.query.deadline_months
+    );
 
     const englishTestMetaKeys = {
       TOEFL: "MIN_TOEFL",
@@ -1091,11 +1130,20 @@ router.get("/find", async (req, res) => {
     }
 
     // English (وجود حداقل نمره)
+    // --- English filter ---
     if (filters.englishTest && englishTestMetaKeys[filters.englishTest]) {
-      const columnName = englishTestMetaKeys[filters.englishTest];
-      whereClauses.push(
-        `pr.${columnName} IS NOT NULL AND pr.${columnName} != ''`
-      );
+      const col = englishTestMetaKeys[filters.englishTest];
+
+      if (filters.englishScore) {
+        // آزمون + سقف نمره: فقط برنامه‌هایی که حداقل نمره‌شان <= نمره‌ کاربر باشد
+        whereClauses.push(
+          `pr.${col} IS NOT NULL AND pr.${col} != '' AND CAST(pr.${col} AS DECIMAL(6,2)) <= ?`
+        );
+        params.push(filters.englishScore);
+      } else {
+        // فقط آزمون انتخاب شده: وجود حداقل نمره
+        whereClauses.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
+      }
     }
 
     // State (CSV; id یا name ⇒ name; IN)
@@ -1140,10 +1188,19 @@ router.get("/find", async (req, res) => {
     }
 
     // Deadline (یک ستون از چهار تا)
-    if (filters.deadline) {
-      whereClauses.push(
-        `CAST(pr.${filters.deadline} AS CHAR) IS NOT NULL AND CAST(pr.${filters.deadline} AS CHAR) != '0000-00-00'`
-      );
+    if (deadlineCol) {
+      whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
+      whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`);
+
+      // اگر ماه هم آمده باشد، فیلتر ماه را هم اعمال کن
+      if (monthNums.length) {
+        whereClauses.push(
+          `MONTH(pr.\`${deadlineCol}\`) IN (${monthNums
+            .map(() => "?")
+            .join(",")})`
+        );
+        params.push(...monthNums);
+      }
     }
 
     // الصاق WHERE
@@ -1213,11 +1270,17 @@ router.get("/find", async (req, res) => {
       }
     }
     if (filters.englishTest && englishTestMetaKeys[filters.englishTest]) {
-      const columnName = englishTestMetaKeys[filters.englishTest];
-      countWhereClauses.push(
-        `pr.${columnName} IS NOT NULL AND pr.${columnName} != ''`
-      );
+      const col = englishTestMetaKeys[filters.englishTest];
+      if (filters.englishScore) {
+        countWhereClauses.push(
+          `pr.${col} IS NOT NULL AND pr.${col} != '' AND CAST(pr.${col} AS DECIMAL(6,2)) <= ?`
+        );
+        countParams.push(filters.englishScore);
+      } else {
+        countWhereClauses.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
+      }
     }
+
     if (filters.state) {
       const rawStates = parseCsv(filters.state);
       if (rawStates.length) {
@@ -1251,10 +1314,19 @@ router.get("/find", async (req, res) => {
       countWhereClauses.push("pr.GRE_requirement = ?");
       countParams.push(filters.gre);
     }
-    if (filters.deadline) {
+    if (deadlineCol) {
+      countWhereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
       countWhereClauses.push(
-        `CAST(pr.${filters.deadline} AS CHAR) IS NOT NULL AND CAST(pr.${filters.deadline} AS CHAR) != '0000-00-00'`
+        `CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`
       );
+      if (monthNums.length) {
+        countWhereClauses.push(
+          `MONTH(pr.\`${deadlineCol}\`) IN (${monthNums
+            .map(() => "?")
+            .join(",")})`
+        );
+        countParams.push(...monthNums);
+      }
     }
     if (countWhereClauses.length > 0) {
       countQuery += " AND " + countWhereClauses.join(" AND ");
@@ -1567,6 +1639,258 @@ router.post("/program-list", async (req, res) => {
 });
 
 //API endpoint second program list
+// router.get("/program-list", async (req, res) => {
+//   try {
+//     const schoolId =
+//       parseInt(
+//         String(
+//           req.query.schoolId || req.query.school || req.query.school_id || ""
+//         ),
+//         10
+//       ) || 0;
+
+//     if (schoolId) {
+//       const levelRaw = (req.query.level || "").toString();
+//       const statusRaw = (req.query.status || "").toString().toLowerCase();
+//       const status =
+//         statusRaw === "published" ? "publish" : statusRaw || "publish";
+
+//       const limit = Math.min(
+//         parseInt(String(req.query.limit || "100"), 10) || 100,
+//         10000
+//       );
+//       const page = Math.max(
+//         parseInt(String(req.query.page || "1"), 10) || 1,
+//         1
+//       );
+//       const offset = (page - 1) * limit;
+
+//       const normalizeLevel = (lv = "") => {
+//         const s = String(lv).toLowerCase();
+//         if (s.includes("ph")) return "Ph.D.";
+//         if (s.includes("master")) return "Master";
+//         if (s.includes("bachelor")) return "Bachelor";
+//         return "Master";
+//       };
+
+//       const BASE_SITE_URL = "https://questapply.com";
+//       const buildUrl = (level, programId, sid) =>
+//         `${BASE_SITE_URL}/find-program/?level=${encodeURIComponent(
+//           level
+//         )}&program=${encodeURIComponent(
+//           String(programId)
+//         )}&school=${encodeURIComponent(String(sid))}`;
+
+//       const levelFilter = levelRaw ? `AND (LOWER(level) LIKE ?)` : ``;
+//       const levelParam = levelRaw
+//         ? [`%${levelRaw.toString().toLowerCase()}%`]
+//         : [];
+
+//       const [countRows] = await db.query(
+//         `
+//         SELECT COUNT(*) AS cnt
+//         FROM qacom_wp_apply_programs_relationship
+//         WHERE school_id = ? AND status = ?
+//         ${levelFilter}
+//         `,
+//         [schoolId, status, ...levelParam]
+//       );
+//       const total = Number(countRows?.[0]?.cnt || 0);
+
+//       const [rows] = await db.query(
+//         `
+//         SELECT
+//           ID            AS row_id,
+//           program_id,
+//           title,
+//           level,
+//           type,
+//           sub_program,
+//           deadline_fall,
+//           deadline_winter,
+//           deadline_spring,
+//           deadline_summer
+//         FROM qacom_wp_apply_programs_relationship
+//         WHERE school_id = ? AND status = ?
+//         ${levelFilter}
+//         ORDER BY title ASC
+//         LIMIT ? OFFSET ?
+//         `,
+//         [schoolId, status, ...levelParam, limit, offset]
+//       );
+
+//       const parsePhpStringArray = (s) => {
+//         if (!s || typeof s !== "string" || !s.startsWith("a:")) return null;
+//         const out = [];
+//         const re = /s:\d+:"([^"]*)"/g;
+//         let m;
+//         while ((m = re.exec(s)) !== null) out.push(m[1]);
+//         return out.length ? out : null;
+//       };
+
+//       const seenPage = new Set();
+//       const programList = [];
+
+//       rows.forEach((r) => {
+//         const lvl = normalizeLevel(r.level);
+//         const title = (r.title || "").trim();
+//         if (!r.program_id || !title) return;
+
+//         const key = `${title.toLowerCase()}::${lvl}`;
+//         if (seenPage.has(key)) return;
+//         seenPage.add(key);
+
+//         programList.push({
+//           rowId: r.row_id,
+//           programId: r.program_id,
+//           title,
+//           level: lvl,
+//           degreeType: r.type || null,
+//           subProgram: parsePhpStringArray(r.sub_program) || null,
+//           url: buildUrl(lvl, r.program_id, schoolId),
+//         });
+//       });
+
+//       const [allRows] = await db.query(
+//         `
+//   SELECT program_id, title, level, type, sub_program, deadline_fall, deadline_winter, deadline_spring, deadline_summer
+//   FROM qacom_wp_apply_programs_relationship
+//   WHERE school_id = ? AND status = ?
+//   ORDER BY title ASC
+//   `,
+//         [schoolId, status]
+//       );
+
+//       // --- Aggregate seasonal deadlines across all programs for this school ---
+//       const toISO = (s) => {
+//         if (!s) return null;
+//         // اگر از قبل YYYY-MM-DD است
+//         const str = (s ?? "").toString().trim();
+//         if (!str || str === "0000-00-00") return null;
+//         if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+//         const t = Date.parse(str);
+//         if (!isNaN(t)) {
+//           const d = new Date(t);
+//           const mm = String(d.getMonth() + 1).padStart(2, "0");
+//           const dd = String(d.getDate()).padStart(2, "0");
+//           return `${d.getFullYear()}-${mm}-${dd}`;
+//         }
+//         return null;
+//       };
+
+//       const minDate = (a, b) => {
+//         if (!a) return b || null;
+//         if (!b) return a || null;
+//         return a < b ? a : b;
+//       };
+
+//       const deadlinesAgg = {
+//         fall: null,
+//         winter: null,
+//         spring: null,
+//         summer: null,
+//       };
+
+//       for (const r of allRows) {
+//         const fallISO = toISO(r.deadline_fall);
+//         const winterISO = toISO(r.deadline_winter);
+//         const springISO = toISO(r.deadline_spring);
+//         const summerISO = toISO(r.deadline_summer);
+
+//         if (fallISO) deadlinesAgg.fall = minDate(deadlinesAgg.fall, fallISO);
+//         if (winterISO)
+//           deadlinesAgg.winter = minDate(deadlinesAgg.winter, winterISO);
+//         if (springISO)
+//           deadlinesAgg.spring = minDate(deadlinesAgg.spring, springISO);
+//         if (summerISO)
+//           deadlinesAgg.summer = minDate(deadlinesAgg.summer, summerISO);
+//       }
+
+//       const groupedMap = {
+//         Bachelor: new Map(),
+//         Master: new Map(),
+//         "Ph.D.": new Map(),
+//       };
+
+//       allRows.forEach((r) => {
+//         const lvl = normalizeLevel(r.level);
+//         const title = (r.title || "").trim();
+//         if (!r.program_id || !title) return;
+
+//         const key = `${title.toLowerCase()}::${lvl}`;
+//         if (groupedMap[lvl].has(key)) return;
+
+//         groupedMap[lvl].set(key, {
+//           rowId: null,
+//           programId: r.program_id,
+//           title,
+//           level: lvl,
+//           degreeType: r.type || null,
+//           subProgram: parsePhpStringArray(r.sub_program) || null,
+//           url: buildUrl(lvl, r.program_id, schoolId),
+//         });
+//       });
+
+//       const byLevel = {};
+//       ["Master", "Ph.D.", "Bachelor"].forEach((lvl) => {
+//         const list = Array.from(groupedMap[lvl].values()).sort((a, b) =>
+//           a.title.localeCompare(b.title)
+//         );
+//         byLevel[lvl] = { total: list.length, top3: list.slice(0, 3) };
+//       });
+
+//       return res.json({
+//         schoolId,
+//         page,
+//         limit,
+//         total,
+//         programList,
+//         byLevel,
+//         deadlines: deadlinesAgg,
+//       });
+//     }
+
+//     const { email } = req.user;
+//     // گرفتن userId
+//     const [userData] = await db.query(
+//       `SELECT ID FROM qacom_wp_users WHERE user_email = ?`,
+//       [email]
+//     );
+//     if (!userData?.length) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+//     const userId = userData[0].ID;
+
+//     const [programListData] = await db.query(
+//       `SELECT meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key = 'program_list'`,
+//       [userId]
+//     );
+
+//     let savedProgramRowIds = [];
+//     if (programListData?.length && programListData[0].meta_value) {
+//       // PHP-serialized → regex parse
+//       const serializedData = programListData[0].meta_value;
+//       const arrayPattern = /a:(\d+):{(.*?)}/s;
+//       const match = serializedData.match(arrayPattern);
+//       if (match) {
+//         const itemPattern = /i:(\d+);s:(\d+):"(\d+)";/g;
+//         let itemMatch;
+//         while ((itemMatch = itemPattern.exec(match[2])) !== null) {
+//           savedProgramRowIds.push(itemMatch[3]);
+//         }
+//       }
+//     }
+
+//     return res.json({ programList: savedProgramRowIds });
+//   } catch (error) {
+//     console.error("GET /program-list error:", error);
+//     res
+//       .status(500)
+//       .json({ error: "Internal server error", details: error.message });
+//   }
+// });
+
+// GET /program-data/program-list — deadlines exactly like /find (per row, no school-level aggregation)
 router.get("/program-list", async (req, res) => {
   try {
     const schoolId =
@@ -1577,98 +1901,178 @@ router.get("/program-list", async (req, res) => {
         10
       ) || 0;
 
-    if (schoolId) {
-      const levelRaw = (req.query.level || "").toString();
-      const statusRaw = (req.query.status || "").toString().toLowerCase();
-      const status =
-        statusRaw === "published" ? "publish" : statusRaw || "publish";
+    // ===== helpers — IDENTICAL to /find =====
+    const formatDeadlineDate = (v) => {
+      if (!v) return null;
+      const s = String(v).trim();
+      if (!s || s === "0000-00-00") return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      const t = Date.parse(s);
+      if (Number.isNaN(t)) return null;
+      const d = new Date(t);
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${d.getFullYear()}-${mm}-${dd}`;
+    };
 
-      const limit = Math.min(
-        parseInt(String(req.query.limit || "100"), 10) || 100,
-        10000
+    const normalizeLevel = (lv = "") => {
+      const s = String(lv).toLowerCase();
+      if (s.includes("ph")) return "Ph.D.";
+      if (s.includes("master")) return "Master";
+      if (s.includes("bachelor")) return "Bachelor";
+      return "Master";
+    };
+
+    const parsePhpStringArray = (s) => {
+      if (!s || typeof s !== "string" || !s.startsWith("a:")) return null;
+      const out = [];
+      const re = /s:\d+:"([^"]*)"/g;
+      let m;
+      while ((m = re.exec(s)) !== null) out.push(m[1]);
+      return out.length ? out : null;
+    };
+
+    const BASE_SITE_URL = "https://questapply.com";
+    const buildUrl = (level, programId, sid) =>
+      `${BASE_SITE_URL}/find-program/?level=${encodeURIComponent(
+        level
+      )}&program=${encodeURIComponent(
+        String(programId)
+      )}&school=${encodeURIComponent(String(sid))}`;
+
+    // ===== no schoolId → return saved list (unchanged behavior) =====
+    if (!schoolId) {
+      const { email } = req.user;
+      const [userData] = await db.query(
+        `SELECT ID FROM qacom_wp_users WHERE user_email = ?`,
+        [email]
       );
-      const page = Math.max(
-        parseInt(String(req.query.page || "1"), 10) || 1,
-        1
-      );
-      const offset = (page - 1) * limit;
+      if (!userData?.length)
+        return res.status(404).json({ error: "User not found" });
+      const userId = userData[0].ID;
 
-      const normalizeLevel = (lv = "") => {
-        const s = String(lv).toLowerCase();
-        if (s.includes("ph")) return "Ph.D.";
-        if (s.includes("master")) return "Master";
-        if (s.includes("bachelor")) return "Bachelor";
-        return "Master";
-      };
-
-      const BASE_SITE_URL = "https://questapply.com";
-      const buildUrl = (level, programId, sid) =>
-        `${BASE_SITE_URL}/find-program/?level=${encodeURIComponent(
-          level
-        )}&program=${encodeURIComponent(
-          String(programId)
-        )}&school=${encodeURIComponent(String(sid))}`;
-
-      const levelFilter = levelRaw ? `AND (LOWER(level) LIKE ?)` : ``;
-      const levelParam = levelRaw
-        ? [`%${levelRaw.toString().toLowerCase()}%`]
-        : [];
-
-      const [countRows] = await db.query(
-        `
-        SELECT COUNT(*) AS cnt
-        FROM qacom_wp_apply_programs_relationship
-        WHERE school_id = ? AND status = ?
-        ${levelFilter}
-        `,
-        [schoolId, status, ...levelParam]
-      );
-      const total = Number(countRows?.[0]?.cnt || 0);
-
-      const [rows] = await db.query(
-        `
-        SELECT
-          ID            AS row_id,      -- شناسه ردیف رابطه (با POST add/removeت هماهنگ)
-          program_id,                    -- شناسه برنامه (برای لینک find-program)
-          title,
-          level,
-          type,
-          sub_program,
-          deadline_fall,
-          deadline_winter,
-          deadline_spring,
-          deadline_summer
-        FROM qacom_wp_apply_programs_relationship
-        WHERE school_id = ? AND status = ?
-        ${levelFilter}
-        ORDER BY title ASC
-        LIMIT ? OFFSET ?
-        `,
-        [schoolId, status, ...levelParam, limit, offset]
+      const [programListData] = await db.query(
+        `SELECT meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key = 'program_list'`,
+        [userId]
       );
 
-      const parsePhpStringArray = (s) => {
-        if (!s || typeof s !== "string" || !s.startsWith("a:")) return null;
-        const out = [];
-        const re = /s:\d+:"([^"]*)"/g;
-        let m;
-        while ((m = re.exec(s)) !== null) out.push(m[1]);
-        return out.length ? out : null;
-      };
+      let savedProgramRowIds = [];
+      if (programListData?.length && programListData[0].meta_value) {
+        const serializedData = programListData[0].meta_value;
+        const arrayPattern = /a:(\d+):{(.*?)}/s;
+        const match = serializedData.match(arrayPattern);
+        if (match) {
+          const itemPattern = /i:(\d+);s:(\d+):"(\d+)";/g;
+          let im;
+          while ((im = itemPattern.exec(match[2])) !== null)
+            savedProgramRowIds.push(im[3]);
+        }
+      }
+      return res.json({ programList: savedProgramRowIds });
+    }
 
-      const seenPage = new Set();
-      const programList = [];
+    // ===== with schoolId: return per-row deadlines like /find =====
+    const statusRaw = (req.query.status || "").toString().toLowerCase();
+    const status =
+      statusRaw === "published" ? "publish" : statusRaw || "publish";
 
-      rows.forEach((r) => {
-        const lvl = normalizeLevel(r.level);
-        const title = (r.title || "").trim();
-        if (!r.program_id || !title) return;
+    const limit = Math.min(
+      parseInt(String(req.query.limit || "100"), 10) || 100,
+      10000
+    );
+    const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
+    const offset = (page - 1) * limit;
 
-        const key = `${title.toLowerCase()}::${lvl}`;
-        if (seenPage.has(key)) return;
-        seenPage.add(key);
+    const levelRaw = (req.query.level || "").toString();
+    const levelFilter = levelRaw ? `AND (LOWER(pr.level) LIKE ?)` : ``;
+    const levelParam = levelRaw ? [`%${levelRaw.toLowerCase()}%`] : [];
 
-        programList.push({
+    // count
+    const [countRows] = await db.query(
+      `
+      SELECT COUNT(*) AS cnt
+      FROM qacom_wp_apply_programs_relationship pr
+      WHERE pr.school_id = ? AND pr.status = ?
+      ${levelFilter}
+      `,
+      [schoolId, status, ...levelParam]
+    );
+    const total = Number(countRows?.[0]?.cnt || 0);
+
+    // rows (source of truth for deadlines)
+    const [rows] = await db.query(
+      `
+      SELECT
+        pr.ID            AS row_id,
+        pr.program_id,
+        pr.title,
+        pr.level,
+        pr.type,
+        pr.sub_program,
+        pr.deadline_fall,
+        pr.deadline_winter,
+        pr.deadline_spring,
+        pr.deadline_summer
+      FROM qacom_wp_apply_programs_relationship pr
+      WHERE pr.school_id = ? AND pr.status = ?
+      ${levelFilter}
+      ORDER BY pr.title ASC
+      LIMIT ? OFFSET ?
+      `,
+      [schoolId, status, ...levelParam, limit, offset]
+    );
+
+    // build programList EXACTLY like /find (only valid dates included)
+    const programList = [];
+    for (const r of rows) {
+      const lvl = normalizeLevel(r.level);
+      const title = (r.title || "").trim();
+      if (!r.program_id || !title) continue;
+
+      const fall = formatDeadlineDate(r.deadline_fall);
+      const winter = formatDeadlineDate(r.deadline_winter);
+      const spring = formatDeadlineDate(r.deadline_spring);
+      const summer = formatDeadlineDate(r.deadline_summer);
+
+      const deadline = [];
+      if (fall) deadline.push({ season: "Fall", date: fall });
+      if (winter) deadline.push({ season: "Winter", date: winter });
+      if (spring) deadline.push({ season: "Spring", date: spring });
+      if (summer) deadline.push({ season: "Summer", date: summer });
+
+      programList.push({
+        rowId: r.row_id,
+        programId: r.program_id,
+        title,
+        level: lvl,
+        degreeType: r.type || null,
+        subProgram: parsePhpStringArray(r.sub_program) || null,
+        url: buildUrl(lvl, r.program_id, schoolId),
+        deadline, // ← مثل /find (فقط تاریخ‌های معتبر)
+      });
+    }
+
+    // byLevel (for cards) — unchanged
+    const [allForGroups] = await db.query(
+      `
+      SELECT ID AS row_id, program_id, title, level, type, sub_program
+      FROM qacom_wp_apply_programs_relationship
+      WHERE school_id = ? AND status = ?
+      `,
+      [schoolId, status]
+    );
+    const groupedMap = {
+      Bachelor: new Map(),
+      Master: new Map(),
+      "Ph.D.": new Map(),
+    };
+    for (const r of allForGroups) {
+      const lvl = normalizeLevel(r.level);
+      const title = (r.title || "").trim();
+      if (!r.program_id || !title) continue;
+      const key = `${title.toLowerCase()}::${lvl}`;
+      if (!groupedMap[lvl].has(key)) {
+        groupedMap[lvl].set(key, {
           rowId: r.row_id,
           programId: r.program_id,
           title,
@@ -1677,139 +2081,25 @@ router.get("/program-list", async (req, res) => {
           subProgram: parsePhpStringArray(r.sub_program) || null,
           url: buildUrl(lvl, r.program_id, schoolId),
         });
-      });
-
-      const [allRows] = await db.query(
-        `
-  SELECT program_id, title, level, type, sub_program, deadline_fall, deadline_winter, deadline_spring, deadline_summer
-  FROM qacom_wp_apply_programs_relationship
-  WHERE school_id = ? AND status = ?
-  ORDER BY title ASC
-  `,
-        [schoolId, status]
+      }
+    }
+    const byLevel = {};
+    ["Master", "Ph.D.", "Bachelor"].forEach((lvl) => {
+      const list = Array.from(groupedMap[lvl].values()).sort((a, b) =>
+        a.title.localeCompare(b.title)
       );
+      byLevel[lvl] = { total: list.length, top3: list.slice(0, 3) };
+    });
 
-      // --- Aggregate seasonal deadlines across all programs for this school ---
-      const toISO = (s) => {
-        if (!s) return null;
-        // اگر از قبل YYYY-MM-DD است
-        const str = (s ?? "").toString().trim();
-        if (!str || str === "0000-00-00") return null;
-        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-        const t = Date.parse(str);
-        if (!isNaN(t)) {
-          const d = new Date(t);
-          const mm = String(d.getMonth() + 1).padStart(2, "0");
-          const dd = String(d.getDate()).padStart(2, "0");
-          return `${d.getFullYear()}-${mm}-${dd}`;
-        }
-        return null;
-      };
-
-      const minDate = (a, b) => {
-        if (!a) return b || null;
-        if (!b) return a || null;
-        return a < b ? a : b;
-      };
-
-      const deadlinesAgg = {
-        fall: null,
-        winter: null,
-        spring: null,
-        summer: null,
-      };
-
-      for (const r of allRows) {
-        const fallISO = toISO(r.deadline_fall);
-        const winterISO = toISO(r.deadline_winter);
-        const springISO = toISO(r.deadline_spring);
-        const summerISO = toISO(r.deadline_summer);
-
-        if (fallISO) deadlinesAgg.fall = minDate(deadlinesAgg.fall, fallISO);
-        if (winterISO)
-          deadlinesAgg.winter = minDate(deadlinesAgg.winter, winterISO);
-        if (springISO)
-          deadlinesAgg.spring = minDate(deadlinesAgg.spring, springISO);
-        if (summerISO)
-          deadlinesAgg.summer = minDate(deadlinesAgg.summer, summerISO);
-      }
-
-      const groupedMap = {
-        Bachelor: new Map(),
-        Master: new Map(),
-        "Ph.D.": new Map(),
-      };
-
-      allRows.forEach((r) => {
-        const lvl = normalizeLevel(r.level);
-        const title = (r.title || "").trim();
-        if (!r.program_id || !title) return;
-
-        const key = `${title.toLowerCase()}::${lvl}`;
-        if (groupedMap[lvl].has(key)) return;
-
-        groupedMap[lvl].set(key, {
-          rowId: null,
-          programId: r.program_id,
-          title,
-          level: lvl,
-          degreeType: r.type || null,
-          subProgram: parsePhpStringArray(r.sub_program) || null,
-          url: buildUrl(lvl, r.program_id, schoolId),
-        });
-      });
-
-      const byLevel = {};
-      ["Master", "Ph.D.", "Bachelor"].forEach((lvl) => {
-        const list = Array.from(groupedMap[lvl].values()).sort((a, b) =>
-          a.title.localeCompare(b.title)
-        );
-        byLevel[lvl] = { total: list.length, top3: list.slice(0, 3) };
-      });
-
-      return res.json({
-        schoolId,
-        page,
-        limit,
-        total,
-        programList,
-        byLevel,
-        deadlines: deadlinesAgg,
-      });
-    }
-
-    const { email } = req.user;
-    // گرفتن userId
-    const [userData] = await db.query(
-      `SELECT ID FROM qacom_wp_users WHERE user_email = ?`,
-      [email]
-    );
-    if (!userData?.length) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userData[0].ID;
-
-    const [programListData] = await db.query(
-      `SELECT meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key = 'program_list'`,
-      [userId]
-    );
-
-    let savedProgramRowIds = [];
-    if (programListData?.length && programListData[0].meta_value) {
-      // PHP-serialized → regex parse
-      const serializedData = programListData[0].meta_value;
-      const arrayPattern = /a:(\d+):{(.*?)}/s;
-      const match = serializedData.match(arrayPattern);
-      if (match) {
-        const itemPattern = /i:(\d+);s:(\d+):"(\d+)";/g;
-        let itemMatch;
-        while ((itemMatch = itemPattern.exec(match[2])) !== null) {
-          savedProgramRowIds.push(itemMatch[3]);
-        }
-      }
-    }
-
-    return res.json({ programList: savedProgramRowIds });
+    // IMPORTANT: no top-level "deadlines" field here (prevents mismatch with /find)
+    return res.json({
+      schoolId,
+      page,
+      limit,
+      total,
+      programList,
+      byLevel,
+    });
   } catch (error) {
     console.error("GET /program-list error:", error);
     res
@@ -2292,6 +2582,105 @@ router.get("/search", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to search programs" });
+  }
+});
+
+// /api/program-data/deadline-months
+router.get("/deadline-months", async (req, res) => {
+  try {
+    const deadlineKey = String(req.query.deadline || "").toLowerCase(); // fall|spring|winter|summer
+    const deadlineCol = seasonColMap[deadlineKey];
+    if (!deadlineCol) return res.json({ months: [] });
+
+    // WHERE مشترک با /find
+    let whereClauses = [`pr.status = 'publish'`];
+    let params = [];
+
+    // همانند /find
+    if (req.query.country) {
+      whereClauses.push("s.country = ?");
+      params.push(req.query.country);
+    }
+
+    if (req.query.degreeLevel) {
+      const level =
+        req.query.degreeLevel === "PhD" ? "Ph.D." : req.query.degreeLevel;
+      whereClauses.push("pr.level = ?");
+      params.push(level);
+    }
+
+    if (req.query.program) {
+      const ids = parseCsv(req.query.program);
+      if (ids.length === 1) {
+        whereClauses.push("pr.program_id = ?");
+        params.push(ids[0]);
+      } else if (ids.length > 1) {
+        whereClauses.push(`pr.program_id IN (${ids.map(() => "?").join(",")})`);
+        params.push(...ids);
+      }
+    }
+
+    if (req.query.areaOfStudy) {
+      const ids = parseCsv(req.query.areaOfStudy);
+      if (ids.length === 1) {
+        whereClauses.push("p.category_id = ?");
+        params.push(ids[0]);
+      } else if (ids.length > 1) {
+        whereClauses.push(`p.category_id IN (${ids.map(() => "?").join(",")})`);
+        params.push(...ids);
+      }
+    }
+
+    if (req.query.school) {
+      whereClauses.push("pr.school_id = ?");
+      params.push(req.query.school);
+    }
+
+    if (req.query.gpa) {
+      whereClauses.push(
+        `(pr.MIN_GPA IS NOT NULL AND pr.MIN_GPA != '' AND CAST(pr.MIN_GPA AS DECIMAL(4,2)) <= ?)`
+      );
+      params.push(req.query.gpa);
+    }
+
+    if (req.query.gre) {
+      whereClauses.push("pr.GRE_requirement = ?");
+      params.push(req.query.gre);
+    }
+
+    // English test presence
+    const englishTestMetaKeys = {
+      TOEFL: "MIN_TOEFL",
+      IELTS: "MIN_IELTS",
+      Duolingo: "MIN_Duolingo",
+      MELAB: "MIN_MELAB",
+      PTE: "MIN_PTE",
+      Cael: "MIN_Cael",
+    };
+    if (req.query.english && englishTestMetaKeys[req.query.english]) {
+      const col = englishTestMetaKeys[req.query.english];
+      whereClauses.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
+    }
+
+    // فقط رکوردهایی که ددلاینِ انتخاب‌شده دارند
+    whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
+    whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`);
+
+    const sql = `
+      SELECT DISTINCT MONTH(pr.\`${deadlineCol}\`) AS m
+      FROM qacom_wp_apply_programs_relationship pr
+      JOIN qacom_wp_apply_schools s ON pr.school_id = s.id
+      JOIN qacom_wp_apply_programs p ON pr.program_id = p.id
+      WHERE ${whereClauses.join(" AND ")}
+      ORDER BY m ASC
+    `;
+    const [rows] = await db.query(sql, params);
+    const months = (rows || []).map((r) => r.m).filter(Boolean); // e.g. [9,10]
+
+    res.json({ months });
+  } catch (e) {
+    console.error("deadline-months error:", e);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

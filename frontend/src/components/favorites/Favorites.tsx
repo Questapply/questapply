@@ -1,31 +1,98 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "../layout/DashboardLayout";
-import AnimatedCard from "../ui/animated-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Heart, SchoolIcon, Settings, Star, Loader2 } from "lucide-react";
+import { Heart, School as SchoolIcon, Settings, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../ui/use-toast";
 import { School } from "../entities/school/SchoolsData";
+import ProgramResultCard, {
+  Program as ProgType,
+} from "@/components/find-programs/ProgramResultCard";
+import SchoolCard from "@/components/find-schools/SchoolCard";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+/* ---------------- Types ---------------- */
 type FavProgram = {
   id: number;
   name: string;
   school: string;
+
+  logo?: string;
+  degree?: string;
+  degreeType?: string;
+  fit?: string;
+  language?: string;
+  campus?: string;
+  qsRank?: number | string;
+
+  // optional extras we may show
   duration?: string;
-  deadline?: string;
   tuition?: string;
+
+  deadline?: Array<{ season: string; date: string }>;
+  deadlineSeason?: string | null;
+
+  toefl?: number | null;
+  gpa?: number | null;
+  greAccepted?: "Not Accepted" | "Required" | "Optional" | "Not Required";
 };
 
-const Favorites = () => {
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return document.documentElement.classList.contains("dark");
-  });
+const normalizeProgramForFavorites = (data: any): FavProgram => {
+  const greRaw =
+    data?.requirements?.gre?.status ??
+    data?.requirements?.gre ??
+    data?.gre ??
+    "";
+  const s = String(greRaw).trim().toLowerCase();
+  let greAccepted: FavProgram["greAccepted"] = "Not Required";
+  if (["not accepted", "not_accepted", "no"].includes(s))
+    greAccepted = "Not Accepted";
+  else if (s === "required") greAccepted = "Required";
+  else if (
+    [
+      "optional",
+      "not required",
+      "nrbsr",
+      "contingent",
+      "contigent",
+      "not required but strongly recommended",
+    ].includes(s)
+  )
+    greAccepted = "Not Required";
+
+  return {
+    id: Number(data?.id),
+    name: data?.name ?? "",
+    school: data?.school ?? "",
+    logo: data?.schoolLogo ?? data?.logo ?? "",
+    degree: data?.degree ?? data?.degreeType ?? "",
+    degreeType: data?.degreeType ?? "",
+    fit: data?.fit ?? "",
+    language: data?.language ?? "",
+    campus: data?.campus ?? "",
+    qsRank: data?.qsRanking ?? data?.qs_rank ?? data?.qsRank ?? null,
+    duration: data?.duration ?? data?.programDuration ?? undefined,
+    tuition: data?.tuition ?? undefined,
+    deadline: Array.isArray(data?.deadline) ? data.deadline : [],
+    deadlineSeason: data?.deadlineSeason ?? null,
+    toefl: data?.requirements?.toefl?.min ?? data?.toefl ?? null,
+    gpa: data?.requirements?.gpa?.min ?? data?.gpa ?? null,
+    greAccepted,
+  };
+};
+
+/* ---------------- Component ---------------- */
+const Favorites: React.FC = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() =>
+    document.documentElement.classList.contains("dark")
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [favoriteSchools, setFavoriteSchools] = useState<School[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingSchools, setLoadingSchools] = useState(true);
+  const [errorSchools, setErrorSchools] = useState<string | null>(null);
 
   const [favoritePrograms, setFavoritePrograms] = useState<FavProgram[]>([]);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
@@ -38,41 +105,32 @@ const Favorites = () => {
   const API_PROGRAMS = `${API_URL}/program-data`;
 
   const toggleTheme = () => {
-    const newDarkMode = !isDarkMode;
-    setIsDarkMode(newDarkMode);
-    if (newDarkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    const next = !isDarkMode;
+    setIsDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
   };
 
-  // ---------- Fetch Favorite Schools ----------
+  /* ---------- Fetch Favorite Schools ---------- */
   const fetchFavoriteSchools = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoadingSchools(true);
+      setErrorSchools(null);
+
       const token = localStorage.getItem("token");
       if (!token) {
         navigate("/auth?mode=login");
         return;
       }
 
-      // IDs
-      const favoriteIdsResponse = await fetch(
-        `${API_SCHOOLS}/favorites/schools`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const idsRes = await fetch(`${API_SCHOOLS}/favorites/schools`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-      if (!favoriteIdsResponse.ok) {
-        if (
-          favoriteIdsResponse.status === 401 ||
-          favoriteIdsResponse.status === 403
-        ) {
+      if (!idsRes.ok) {
+        if (idsRes.status === 401 || idsRes.status === 403) {
           localStorage.removeItem("token");
           navigate("/auth?mode=login");
           return;
@@ -80,43 +138,36 @@ const Favorites = () => {
         throw new Error("Failed to fetch favorite schools");
       }
 
-      const { favorites: favoriteIds } = await favoriteIdsResponse.json();
-
-      if (!favoriteIds || favoriteIds.length === 0) {
+      const { favorites: schoolIds } = await idsRes.json();
+      if (!schoolIds || schoolIds.length === 0) {
         setFavoriteSchools([]);
         return;
       }
 
-      // Details
-      const schools: School[] = [];
-      for (const schoolId of favoriteIds) {
-        const schoolResponse = await fetch(
-          `${API_SCHOOLS}/school/${schoolId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        if (schoolResponse.ok) {
-          const schoolData = await schoolResponse.json();
-          schools.push({ ...schoolData, favorite: true });
+      const details: School[] = [];
+      for (const id of schoolIds) {
+        const res = await fetch(`${API_SCHOOLS}/school/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          details.push({ ...data, favorite: true });
         }
       }
-
-      setFavoriteSchools(schools);
-    } catch (err) {
-      console.error("Error fetching favorite schools:", err);
-      setError("Failed to load favorite schools");
+      setFavoriteSchools(details);
+    } catch (e) {
+      console.error("Error fetching favorite schools:", e);
+      setErrorSchools("Failed to load favorite schools.");
     } finally {
-      setLoading(false);
+      setLoadingSchools(false);
     }
   }, [API_SCHOOLS, navigate]);
 
-  // ---------- Fetch Favorite Programs ----------
-  const loadFavoritePrograms = useCallback(async () => {
+  /* ---------- Fetch Favorite Programs ---------- */
+  const fetchFavoritePrograms = useCallback(async () => {
     try {
       setLoadingPrograms(true);
       setErrorPrograms(null);
@@ -127,15 +178,12 @@ const Favorites = () => {
         return;
       }
 
-      // 1) IDs
       const idsRes = await fetch(`${API_PROGRAMS}/favorites`, {
-        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
-
       if (!idsRes.ok) {
         if (idsRes.status === 401 || idsRes.status === 403) {
           localStorage.removeItem("token");
@@ -151,22 +199,19 @@ const Favorites = () => {
         return;
       }
 
-      // 2) Details (مسیر درست جزییات)
       const programs: FavProgram[] = [];
       for (const pid of programIds) {
-        const pRes = await fetch(`${API_PROGRAMS}/details/${pid}`, {
-          method: "GET",
+        const res = await fetch(`${API_PROGRAMS}/details/${pid}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         });
-        if (pRes.ok) {
-          const data = await pRes.json();
-          programs.push({ ...data });
+        if (res.ok) {
+          const data = await res.json();
+          programs.push(normalizeProgramForFavorites(data));
         }
       }
-
       setFavoritePrograms(programs);
     } catch (e) {
       console.error("Error loading favorite programs:", e);
@@ -176,18 +221,50 @@ const Favorites = () => {
     }
   }, [API_PROGRAMS, navigate]);
 
-  // ---------- Effects ----------
-  useEffect(() => {
-    fetchFavoriteSchools();
-  }, [fetchFavoriteSchools]);
+  /* ---------- Effects ---------- */
+  useEffect(() => void fetchFavoriteSchools(), [fetchFavoriteSchools]);
+  useEffect(() => void fetchFavoritePrograms(), [fetchFavoritePrograms]);
 
-  useEffect(() => {
-    // برای اطمینان، در مونت هم لود کن
-    loadFavoritePrograms();
-  }, [loadFavoritePrograms]);
+  /* ---------- Actions ---------- */
+  const handleRemoveFavoriteSchool = async (schoolId: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/auth?mode=login");
+        return;
+      }
 
-  // ---------- Actions ----------
-  const handleToggleFavoriteProgram = async (programId: number) => {
+      const res = await fetch(`${API_SCHOOLS}/favorites/schools`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ schoolId, action: "remove" }),
+      });
+
+      if (!res.ok) throw new Error("Failed to remove from favorites");
+
+      const s = favoriteSchools.find((x) => x.id === schoolId);
+      setFavoriteSchools((prev) => prev.filter((x) => x.id !== schoolId));
+
+      toast({
+        title: "Removed from Favorites",
+        description: `${
+          s?.name ?? "School"
+        } has been removed from your favorites.`,
+      });
+    } catch (e) {
+      console.error("Error removing favorite:", e);
+      toast({
+        title: "Error",
+        description: "Failed to remove from favorites. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveFavoriteProgram = async (programId: number) => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -207,14 +284,12 @@ const Favorites = () => {
       if (!res.ok) throw new Error("Failed to remove program from favorites");
 
       setFavoritePrograms((prev) => prev.filter((p) => p.id !== programId));
-
       toast({
         title: "Removed from Favorites",
         description: "Program has been removed from your favorites.",
-        variant: "default",
       });
-    } catch (err) {
-      console.error("Error removing favorite program:", err);
+    } catch (e) {
+      console.error("Error removing favorite program:", e);
       toast({
         title: "Error",
         description: "Failed to remove from favorites. Please try again.",
@@ -223,52 +298,10 @@ const Favorites = () => {
     }
   };
 
-  const handleToggleFavorite = async (schoolId: number) => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/auth?mode=login");
-        return;
-      }
+  const handleViewSchool = (id: number) => navigate(`/school/${id}`);
+  const handleViewProgram = (id: number) => navigate(`/program/${id}`);
 
-      const response = await fetch(`${API_SCHOOLS}/favorites/schools`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ schoolId, action: "remove" }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to remove from favorites");
-      }
-
-      const school = favoriteSchools.find((s) => s.id === schoolId);
-      const schoolName = school ? school.name : "School";
-
-      setFavoriteSchools((prev) => prev.filter((s) => s.id !== schoolId));
-
-      toast({
-        title: "Removed from Favorites",
-        description: `${schoolName} has been removed from your favorites.`,
-        variant: "default",
-      });
-    } catch (error) {
-      console.error("Error removing favorite:", error);
-      toast({
-        title: "Error",
-        description: "Failed to remove from favorites. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleViewDetails = (schoolId: number) => {
-    navigate(`/school/${schoolId}`);
-  };
-
-  // ---------- UI ----------
+  /* ---------- UI ---------- */
   return (
     <DashboardLayout
       isDarkMode={isDarkMode}
@@ -280,10 +313,10 @@ const Favorites = () => {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
           className="flex flex-col gap-2"
         >
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             My Favorites
           </h1>
           <p className="text-gray-600 dark:text-gray-300">
@@ -292,29 +325,35 @@ const Favorites = () => {
         </motion.div>
 
         <Tabs defaultValue="schools" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="schools" className="flex items-center gap-2">
-              <SchoolIcon className="h-4 w-4" />
-              <span>Schools</span>
+          <TabsList className="mb-6 w-full flex justify-around items-center">
+            <TabsTrigger
+              value="schools"
+              className="flex items-center gap-2 px-4"
+            >
+              <SchoolIcon className="h-4 w-4 " />
+              <span className="md:text-lg">Schools</span>
             </TabsTrigger>
-            <TabsTrigger value="programs" className="flex items-center gap-2">
+            <TabsTrigger
+              value="programs"
+              className="flex items-center gap-2 px-4"
+            >
               <Settings className="h-4 w-4" />
-              <span>Programs</span>
+              <span className="md:text-lg">Programs</span>
             </TabsTrigger>
           </TabsList>
 
           {/* Schools */}
           <TabsContent value="schools">
-            {loading ? (
+            {loadingSchools ? (
               <div className="flex justify-center items-center h-40">
                 <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
               </div>
-            ) : error ? (
+            ) : errorSchools ? (
               <div className="p-8 text-center bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
                 <h3 className="text-lg font-medium text-red-800 dark:text-red-300 mb-2">
                   Error Loading Favorites
                 </h3>
-                <p className="text-red-600 dark:text-red-400">{error}</p>
+                <p className="text-red-600 dark:text-red-400">{errorSchools}</p>
               </div>
             ) : favoriteSchools.length === 0 ? (
               <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -326,49 +365,15 @@ const Favorites = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-6 md:px-40">
                 {favoriteSchools.map((school, index) => (
-                  <AnimatedCard
+                  <SchoolCard
                     key={school.id}
-                    delay={index * 0.1}
-                    className="overflow-hidden"
-                  >
-                    <div className="relative">
-                      <img
-                        src={school.logo || "/placeholder.svg"}
-                        alt={school.name}
-                        className="w-full h-40 object-cover"
-                      />
-                      <button
-                        className="absolute top-3 right-3 bg-white/80 dark:bg-gray-800/80 p-2 rounded-full"
-                        onClick={() => handleToggleFavorite(school.id)}
-                      >
-                        <Heart className="h-5 w-5 fill-red-500 text-red-500" />
-                      </button>
-                    </div>
-                    <div className="p-5">
-                      <h3 className="font-semibold text-lg mb-1">
-                        {school.name}
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                        {school.location}
-                      </p>
-
-                      {/* rankings display kept as-is */}
-                      {/* ... */}
-
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        {school.acceptance}% Acceptance Rate
-                      </div>
-
-                      <button
-                        className="mt-4 text-sm text-purple-600 dark:text-purple-400 font-medium hover:underline"
-                        onClick={() => handleViewDetails(school.id)}
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </AnimatedCard>
+                    school={school}
+                    index={index}
+                    isFavorite={true}
+                    toggleFavorite={() => handleRemoveFavoriteSchool(school.id)}
+                  />
                 ))}
               </div>
             )}
@@ -399,67 +404,49 @@ const Favorites = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {favoritePrograms.map((program, index) => (
-                  <AnimatedCard
-                    key={program.id}
-                    delay={index * 0.1}
-                    className="flex flex-col"
-                  >
-                    <div className="p-5">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold text-lg mb-1">
-                            {program.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            {program.school}
-                          </p>
-                        </div>
-                        <button
-                          className="bg-white/80 dark:bg-gray-800/80 p-2 rounded-full"
-                          onClick={() =>
-                            handleToggleFavoriteProgram(program.id)
-                          }
-                        >
-                          <Heart className="h-5 w-5 fill-red-500 text-red-500" />
-                        </button>
-                      </div>
+              <div className="grid grid-cols-1 gap-6 md:px-40">
+                {favoritePrograms.map((p, idx) => {
+                  // Map FavProgram -> ProgramResultCard props
+                  const program: ProgType = {
+                    id: p.id,
+                    name: p.name,
+                    degree: p.degree ?? "",
+                    school: p.school,
+                    schoolLogo: p.logo ?? "",
+                    degreeType: p.degreeType ?? p.degree ?? "Program",
+                    fit: p.fit ?? "High Fit",
+                    duration: p.duration ?? "-",
+                    format: null,
+                    language: p.language ?? "-",
+                    campus: p.campus ?? "-",
+                    qsRanking: p.qsRank != null ? String(p.qsRank) : "-",
 
-                      <div className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
-                        <div>
-                          <span className="font-medium">Duration:</span>
-                          <span className="ml-2 text-gray-600 dark:text-gray-300">
-                            {program.duration}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium">
-                            Application Deadline:
-                          </span>
-                          <span className="ml-2 text-gray-600 dark:text-gray-300">
-                            {program.deadline}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium">Tuition:</span>
-                          <span className="ml-2 text-gray-600 dark:text-gray-300">
-                            {program.tuition}
-                          </span>
-                        </div>
-                      </div>
+                    deadline: Array.isArray(p.deadline) ? p.deadline : [],
+                    requirements: {
+                      toefl: { min: Number(p.toefl ?? 0) || 0 },
+                      gpa: { min: Number(p.gpa ?? 0) || 0 },
+                      gre: { status: p.greAccepted ?? "Not Required" },
+                    },
+                  };
 
-                      <div className="mt-4 flex justify-end">
-                        <button
-                          className="text-sm text-purple-600 dark:text-purple-400 font-medium hover:underline"
-                          onClick={() => navigate(`/program/${program.id}`)}
-                        >
-                          View Program
-                        </button>
-                      </div>
-                    </div>
-                  </AnimatedCard>
-                ))}
+                  return (
+                    <ProgramResultCard
+                      key={program.id}
+                      index={idx}
+                      program={program}
+                      selectedEnglish={"TOEFL"}
+                      isCompared={false}
+                      isFavorite={true}
+                      isInList={false}
+                      onToggleCompare={() => {}}
+                      onToggleFavorite={() =>
+                        handleRemoveFavoriteProgram(program.id)
+                      }
+                      onProgramInfo={(id) => handleViewProgram(id)}
+                      onToggleList={() => {}}
+                    />
+                  );
+                })}
               </div>
             )}
           </TabsContent>

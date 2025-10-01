@@ -195,6 +195,8 @@ router.get("/schools", authenticateToken, async (req, res) => {
       MAX(CASE WHEN sm.meta_key = 'women_number_applied' THEN sm.meta_value END) AS women_applied,
       MAX(CASE WHEN sm.meta_key = 'men_number_admitted' THEN sm.meta_value END) AS men_admitted,
       MAX(CASE WHEN sm.meta_key = 'women_number_admitted' THEN sm.meta_value END) AS women_admitted,
+      MAX(CASE WHEN sm.meta_key = 'gr_6_years' THEN sm.meta_value END) AS gr_6_years,
+
 
       IFNULL(MAX(pr_tot.master_total), 0)   AS master_total,
       IFNULL(MAX(pr_tot.phd_total), 0)      AS phd_total,
@@ -210,27 +212,25 @@ router.get("/schools", authenticateToken, async (req, res) => {
          'cost_graduate_in_state','cost_undergrade_out_of_state',
          'graduate_student','undergrade_student',
          'men_number_applied','women_number_applied',
-         'men_number_admitted','women_number_admitted'
+         'men_number_admitted','women_number_admitted',
+         'men_number_admitted','women_number_admitted',
+'gr_6_years'
        )
     `;
 
     // شمارش سطح‌ها
     fromClause += `
       LEFT JOIN (
-        SELECT school_id,
-               COUNT(DISTINCT CASE WHEN norm = 'phd'
-                                      OR norm LIKE '%doctor%'    THEN program_id END) AS phd_total,
-               COUNT(DISTINCT CASE WHEN norm IN ('master','masters') THEN program_id END) AS master_total,
-               COUNT(DISTINCT CASE WHEN norm IN ('bachelor','bachelors') THEN program_id END) AS bachelor_total
-        FROM (
-          SELECT prx.school_id,
-                 prx.program_id,
-                 REPLACE(LOWER(TRIM(prx.level)),'.','') AS norm
-          FROM qacom_wp_apply_programs_relationship prx
-          /* WHERE prx.status = 'publish' */
-        ) t
-        GROUP BY school_id
-      ) pr_tot ON pr_tot.school_id = s.id
+  SELECT
+    school_id,
+    -- شمارش ردیف‌ها مثل /school/:id (بدون DISTINCT و بدون normalize)
+    SUM(CASE WHEN level = 'Master'   THEN 1 ELSE 0 END)   AS master_total,
+    SUM(CASE WHEN level = 'Ph.D.'    THEN 1 ELSE 0 END)   AS phd_total,
+    SUM(CASE WHEN level = 'Bachelor' THEN 1 ELSE 0 END)   AS bachelor_total
+  FROM qacom_wp_apply_programs_relationship
+  WHERE status = 'publish'
+  GROUP BY school_id
+) pr_tot ON pr_tot.school_id = s.id
     `;
 
     // COUNT سبک
@@ -451,13 +451,20 @@ router.get("/schools", authenticateToken, async (req, res) => {
     const t3 = Date.now();
 
     const schools = schoolRows.map((row) => {
-      const graduateStudent = convertNumber(row.graduate_student);
-      const undergradeStudent = convertNumber(row.undergrade_student);
-      const totalStudents = graduateStudent + undergradeStudent;
-      const graduationRate =
-        totalStudents > 0
-          ? Math.round((graduateStudent / totalStudents) * 100)
-          : 0;
+      const gr6 = convertNumber(row.gr_6_years);
+      let graduationRate;
+      if (!isNaN(gr6) && gr6 > 0) {
+        graduationRate = Math.round(gr6);
+      } else {
+        // fallback اختیاری: نسبت grad to total (اگر خواستی می‌توانی 0 بگذاری)
+        const graduateStudent = convertNumber(row.graduate_student);
+        const undergradeStudent = convertNumber(row.undergrade_student);
+        const totalStudents = graduateStudent + undergradeStudent;
+        graduationRate =
+          totalStudents > 0
+            ? Math.round((graduateStudent / totalStudents) * 100)
+            : 0;
+      }
 
       const menApplied = convertNumber(row.men_applied);
       const womenApplied = convertNumber(row.women_applied);
@@ -498,8 +505,8 @@ router.get("/schools", authenticateToken, async (req, res) => {
           the: row.the_rank || "N/A",
         },
         programs,
-        acceptance: acceptanceRate,
-        graduation: graduationRate,
+        acceptance: acceptanceRate ?? "N/A",
+        graduation: graduationRate ?? "N/A",
         cost: {
           inState: convertNumber(row.cost_in_state),
           outState: convertNumber(row.cost_out_state),
@@ -539,12 +546,36 @@ router.get("/schools", authenticateToken, async (req, res) => {
   }
 });
 
-//  API endpoint for single school (rich output for School Details)
+// GET /school/:id  (aligned 1:1 with legacy PHP logic)
 router.get("/school/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { email } = req.user;
 
+    // --- Helpers (use your existing ones if already defined)
+    const decodeHtmlEntities = (s = "") =>
+      typeof s === "string"
+        ? s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+        : s;
+
+    const toNum = (v) => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).replace(/[, ]+/g, "").trim();
+      if (s === "") return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const convertNumber = (v) => {
+      const n = toNum(v);
+      return n === null ? 0 : n;
+    };
+
+    const countryMap = {
+      // fill with your existing map if present; used only for display
+    };
+
+    // 1) Base school + metas (same columns as PHP requires)
     const [rows] = await db.query(
       `
       SELECT
@@ -556,8 +587,8 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
             WHERE pm.post_id = CAST(s.image AS UNSIGNED)
               AND pm.meta_key = '_wp_attached_file'
             LIMIT 1)
-         ELSE s.image
-       END AS image_raw,
+          ELSE s.image
+        END AS image_raw,
 
         -- Rankings
         MAX(CASE WHEN sm.meta_key = 'qs_rank'       THEN sm.meta_value END) AS qs_rank,
@@ -573,16 +604,16 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
         MAX(CASE WHEN sm.meta_key = 'address'     THEN sm.meta_value END) AS address,
         MAX(CASE WHEN sm.meta_key = 'phone'       THEN sm.meta_value END) AS phone,
 
-        -- Test requirements
-        MAX(CASE WHEN sm.meta_key = 'toefl'          THEN sm.meta_value END) AS toefl,
-        MAX(CASE WHEN sm.meta_key = 'ielts'          THEN sm.meta_value END) AS ielts,
-        MAX(CASE WHEN sm.meta_key = 'duolingo'       THEN sm.meta_value END) AS duolingo,
-        MAX(CASE WHEN sm.meta_key = 'melab'          THEN sm.meta_value END) AS melab,
-        MAX(CASE WHEN sm.meta_key = 'pte'            THEN sm.meta_value END) AS pte,
-        MAX(CASE WHEN sm.meta_key = 'sop'            THEN sm.meta_value END) AS sop,
-        MAX(CASE WHEN sm.meta_key = 'transcript'     THEN sm.meta_value END) AS transcript,
-        MAX(CASE WHEN sm.meta_key = 'resume_cs'      THEN sm.meta_value END) AS resume_cs,
-        MAX(CASE WHEN sm.meta_key = 'recommendations'THEN sm.meta_value END) AS recommendations,
+        -- Test requirements (raw values '0'/'1' or null)
+        MAX(CASE WHEN sm.meta_key = 'toefl'            THEN sm.meta_value END) AS toefl,
+        MAX(CASE WHEN sm.meta_key = 'ielts'            THEN sm.meta_value END) AS ielts,
+        MAX(CASE WHEN sm.meta_key = 'duolingo'         THEN sm.meta_value END) AS duolingo,
+        MAX(CASE WHEN sm.meta_key = 'melab'            THEN sm.meta_value END) AS melab,
+        MAX(CASE WHEN sm.meta_key = 'pte'              THEN sm.meta_value END) AS pte,
+        MAX(CASE WHEN sm.meta_key = 'sop'              THEN sm.meta_value END) AS sop,
+        MAX(CASE WHEN sm.meta_key = 'transcript'       THEN sm.meta_value END) AS transcript,
+        MAX(CASE WHEN sm.meta_key = 'resume_cs'        THEN sm.meta_value END) AS resume_cs,
+        MAX(CASE WHEN sm.meta_key = 'recommendations'  THEN sm.meta_value END) AS recommendations,
         MAX(CASE WHEN sm.meta_key = 'application_form' THEN sm.meta_value END) AS application_form,
         MAX(CASE WHEN sm.meta_key = 'application_fee'  THEN sm.meta_value END) AS application_fee,
 
@@ -596,20 +627,22 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
         MAX(CASE WHEN sm.meta_key = 'women_number_enrolled_full_time' THEN sm.meta_value END) AS women_number_enrolled_full_time,
         MAX(CASE WHEN sm.meta_key = 'women_number_enrolled_part_time' THEN sm.meta_value END) AS women_number_enrolled_part_time,
 
-        -- Students totals
+        -- Students totals (TYPE tab uses these!)
         MAX(CASE WHEN sm.meta_key = 'men_student'    THEN sm.meta_value END) AS men_student,
         MAX(CASE WHEN sm.meta_key = 'women_student'  THEN sm.meta_value END) AS women_student,
         MAX(CASE WHEN sm.meta_key = 'graduate_student'   THEN sm.meta_value END) AS graduate_student,
         MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
+        MAX(CASE WHEN sm.meta_key = 'full_time_student'  THEN sm.meta_value END) AS full_time_student,
+        MAX(CASE WHEN sm.meta_key = 'part_time_student'  THEN sm.meta_value END) AS part_time_student,
 
         -- Costs breakdown
-        MAX(CASE WHEN sm.meta_key = 'cost_undergrade_in_state'   THEN sm.meta_value END) AS cost_undergrade_in_state,
+        MAX(CASE WHEN sm.meta_key = 'cost_undergrade_in_state'     THEN sm.meta_value END) AS cost_undergrade_in_state,
         MAX(CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN sm.meta_value END) AS cost_undergrade_out_of_state,
-        MAX(CASE WHEN sm.meta_key = 'cost_graduate_in_state'     THEN sm.meta_value END) AS cost_graduate_in_state,
-        MAX(CASE WHEN sm.meta_key = 'cost_graduate_out_of_state' THEN sm.meta_value END) AS cost_graduate_out_of_state,
-        MAX(CASE WHEN sm.meta_key = 'cost_room_and_board'        THEN sm.meta_value END) AS cost_room_and_board,
-        MAX(CASE WHEN sm.meta_key = 'cost_books_and_supplies'    THEN sm.meta_value END) AS cost_books_and_supplies,
-        MAX(CASE WHEN sm.meta_key = 'cost_other_expenses'        THEN sm.meta_value END) AS cost_other_expenses,
+        MAX(CASE WHEN sm.meta_key = 'cost_graduate_in_state'       THEN sm.meta_value END) AS cost_graduate_in_state,
+        MAX(CASE WHEN sm.meta_key = 'cost_graduate_out_of_state'   THEN sm.meta_value END) AS cost_graduate_out_of_state,
+        MAX(CASE WHEN sm.meta_key = 'cost_room_and_board'          THEN sm.meta_value END) AS cost_room_and_board,
+        MAX(CASE WHEN sm.meta_key = 'cost_books_and_supplies'      THEN sm.meta_value END) AS cost_books_and_supplies,
+        MAX(CASE WHEN sm.meta_key = 'cost_other_expenses'          THEN sm.meta_value END) AS cost_other_expenses,
 
         -- Race & Ethnicity
         MAX(CASE WHEN sm.meta_key = 'race_asian_and_pacific_islander' THEN sm.meta_value END) AS race_asian_and_pacific_islander,
@@ -619,9 +652,11 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
         MAX(CASE WHEN sm.meta_key = 'race_white'   THEN sm.meta_value END) AS race_white,
         MAX(CASE WHEN sm.meta_key = 'race_other'   THEN sm.meta_value END) AS race_other,
 
-        
-        -- Optional: graduation meta
-        MAX(CASE WHEN sm.meta_key = 'gr_6_years' THEN sm.meta_value END) AS gr_6_years
+        -- Optional: graduation meta (6-year)
+        MAX(CASE WHEN sm.meta_key = 'gr_6_years' THEN sm.meta_value END) AS gr_6_years,
+        MAX(CASE WHEN sm.meta_key = 'content' THEN sm.meta_value END) AS content
+
+
 
       FROM qacom_wp_apply_schools s
       LEFT JOIN qacom_wp_apply_schools_meta sm ON s.id = sm.school_id
@@ -636,7 +671,7 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
     }
     const school = rows[0];
 
-    // 2) counts for programs (برای نمایش خلاصه فعلی)
+    // 2) program counts (for the little summary)
     const [programRows] = await db.query(
       `
       SELECT
@@ -649,59 +684,24 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
       [school.id]
     );
 
-    // --- Compute Acceptance/Graduation/Enrolled ---
-    const graduateStudent = convertNumber(school.graduate_student);
-    const undergradeStudent = convertNumber(school.undergrade_student);
-    const totalStudents = graduateStudent + undergradeStudent;
-    const graduationRateMeta = school.gr_6_years
-      ? convertNumber(school.gr_6_years)
-      : null;
-    const graduationRate =
-      graduationRateMeta !== null
-        ? graduationRateMeta
-        : totalStudents > 0
-        ? Math.round((graduateStudent / totalStudents) * 100)
-        : 0;
+    // ---------- Build calculated fields (match PHP) ----------
 
-    const menApplied = convertNumber(school.men_number_applied);
-    const womenApplied = convertNumber(school.women_number_applied);
-    const menAdmitted = convertNumber(school.men_number_admitted);
-    const womenAdmitted = convertNumber(school.women_number_admitted);
+    // Rankings -> numbers
+    const ranking = {
+      qs: convertNumber(school.qs_rank),
+      usNews: convertNumber(school.us_news_rank),
+      forbes: convertNumber(school.forbes_rank),
+      shanghai: convertNumber(school.shanghai_rank),
+      the: convertNumber(school.the_rank),
+    };
 
-    const menFT = convertNumber(school.men_number_enrolled_full_time);
-    const menPT = convertNumber(school.men_number_enrolled_part_time);
-    const womenFT = convertNumber(school.women_number_enrolled_full_time);
-    const womenPT = convertNumber(school.women_number_enrolled_part_time);
-
-    const totalApplied = menApplied + womenApplied;
-    const totalAdmitted = menAdmitted + womenAdmitted;
-    const numberEnrolled = menFT + menPT + womenFT + womenPT;
-
-    const acceptanceRate =
-      totalApplied > 0 ? Math.round((totalAdmitted / totalApplied) * 100) : 0;
-    const enrolledRate =
-      totalAdmitted > 0
-        ? Math.round((numberEnrolled / totalAdmitted) * 100)
-        : null;
-
-    // --- Program summary strings (سازگاری با فرانت فعلی) ---
-    const programs = [];
-    const masterCount = convertNumber(programRows[0]?.master_count) || 0;
-    const phdCount = convertNumber(programRows[0]?.phd_count) || 0;
-    const bachelorCount = convertNumber(programRows[0]?.bachelor_count) || 0;
-    if (masterCount > 0) programs.push(`Master: ${masterCount} Programs`);
-    if (phdCount > 0) programs.push(`Ph.D: ${phdCount} Programs`);
-    if (bachelorCount > 0) programs.push(`Bachelor: ${bachelorCount} Programs`);
-
-    // --- Location ---
+    // Location, logo
     const countryName =
       countryMap[school.country] || `Unknown (${school.country})`;
     const cleanCountryName = countryName.replace(/\s*\([^)]*\)/g, "").trim();
+    const finalLogoUrl = buildUploadsUrl(school.image_raw);
 
-    // --- Logo via proxy ---
-    const finalLogoUrl = buildUploadsUrl(school.image_raw || "");
-
-    // --- Cost breakdown ---
+    // Costs (pure meta sums like PHP chart)
     const undergradInState = convertNumber(school.cost_undergrade_in_state);
     const undergradOutState = convertNumber(
       school.cost_undergrade_out_of_state
@@ -711,54 +711,168 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
     const roomAndBoard = convertNumber(school.cost_room_and_board);
     const booksAndSupplies = convertNumber(school.cost_books_and_supplies);
     const otherExpenses = convertNumber(school.cost_other_expenses);
+    const otherCommon =
+      (roomAndBoard || 0) + (booksAndSupplies || 0) + (otherExpenses || 0);
 
-    const totalInState = [
-      undergradInState,
-      gradInState,
-      roomAndBoard,
-      booksAndSupplies,
-      otherExpenses,
-    ]
-      .map((v) => v || 0)
-      .reduce((a, b) => a + b, 0);
-    const totalOutState = [
-      undergradOutState,
-      gradOutState,
-      roomAndBoard,
-      booksAndSupplies,
-      otherExpenses,
-    ]
-      .map((v) => v || 0)
-      .reduce((a, b) => a + b, 0);
+    // Front-end “summary” fields (kept same shape)
+    const totalInState =
+      (undergradInState || 0) + (gradInState || 0) + otherCommon;
+    const totalOutState =
+      (undergradOutState || 0) + (gradOutState || 0) + otherCommon;
 
-    // --- Build response ---
+    // Students tab (exact metas like PHP Students section)
+    const menStudent = convertNumber(school.men_student);
+    const womenStudent = convertNumber(school.women_student);
+    const undergradeStudent = convertNumber(school.undergrade_student);
+    const graduateStudent = convertNumber(school.graduate_student);
+    const fullTimeStudent = convertNumber(school.full_time_student); // ← NEW: use dedicated meta
+    const partTimeStudent = convertNumber(school.part_time_student); // ← NEW: use dedicated meta
+
+    // Admissions tab (exact formulas like PHP Admissions)
+    const appliedMen = toNum(school.men_number_applied);
+    const appliedWomen = toNum(school.women_number_applied);
+    const admittedMen = toNum(school.men_number_admitted);
+    const admittedWomen = toNum(school.women_number_admitted);
+
+    // Enrolled by gender (from gender-based metas, not the Students tab totals)
+    const menFT = convertNumber(school.men_number_enrolled_full_time);
+    const menPT = convertNumber(school.men_number_enrolled_part_time);
+    const womenFT = convertNumber(school.women_number_enrolled_full_time);
+    const womenPT = convertNumber(school.women_number_enrolled_part_time);
+
+    const menEnrolled = menFT + menPT;
+    const womenEnrolled = womenFT + womenPT;
+    const totalEnrolled = menEnrolled + womenEnrolled;
+
+    // Acceptance Rate (like PHP: empty if any invalid)
+    let acceptanceRate = "";
+    if (
+      Number.isFinite(appliedMen) &&
+      Number.isFinite(appliedWomen) &&
+      Number.isFinite(admittedMen) &&
+      Number.isFinite(admittedWomen) &&
+      appliedMen + appliedWomen > 0
+    ) {
+      acceptanceRate = Math.round(
+        ((admittedMen + admittedWomen) / (appliedMen + appliedWomen)) * 100
+      );
+    }
+
+    // Acceptance Rate by gender
+    let menAcceptanceRate = "";
+    if (
+      Number.isFinite(appliedMen) &&
+      Number.isFinite(admittedMen) &&
+      appliedMen > 0
+    ) {
+      menAcceptanceRate = Math.round((admittedMen / appliedMen) * 100);
+    }
+    let womenAcceptanceRate = "";
+    if (
+      Number.isFinite(appliedWomen) &&
+      Number.isFinite(admittedWomen) &&
+      appliedWomen > 0
+    ) {
+      womenAcceptanceRate = Math.round((admittedWomen / appliedWomen) * 100);
+    }
+
+    // Enrolled Rate (Yield) — like PHP (empty string if invalid)
+    let totalYield = "";
+    if (
+      totalEnrolled > 0 &&
+      Number.isFinite(admittedMen) &&
+      Number.isFinite(admittedWomen) &&
+      admittedMen + admittedWomen > 0
+    ) {
+      totalYield = Math.round(
+        (totalEnrolled / (admittedMen + admittedWomen)) * 100
+      );
+    }
+    let menYield = "";
+    if (menEnrolled > 0 && Number.isFinite(admittedMen) && admittedMen > 0) {
+      menYield = Math.round((menEnrolled / admittedMen) * 100);
+    }
+    let womenYield = "";
+    if (
+      womenEnrolled > 0 &&
+      Number.isFinite(admittedWomen) &&
+      admittedWomen > 0
+    ) {
+      womenYield = Math.round((womenEnrolled / admittedWomen) * 100);
+    }
+
+    // Graduation rate: PHP snippet you gave uses either gr_6_years or a fallback.
+    // We'll follow your previous behavior, but keep it simple: prefer gr_6_years if numeric; otherwise leave empty string.
+    let graduationRate = "";
+    const gr6 = toNum(school.gr_6_years);
+    if (Number.isFinite(gr6)) {
+      graduationRate = Math.round(gr6);
+    }
+
+    // Requirements defaults exactly like PHP:
+    // - if meta missing (=== false in PHP sense): default 0 for {duolingo, melab, pte}, default 1 for others
+    const rawReq = {
+      toefl: school.toefl,
+      ielts: school.ielts,
+      duolingo: school.duolingo,
+      melab: school.melab,
+      pte: school.pte,
+      sop: school.sop,
+      transcript: school.transcript,
+      resume_cs: school.resume_cs,
+      recommendations: school.recommendations,
+      application_form: school.application_form,
+      application_fee: school.application_fee,
+    };
+
+    const defaultIfMissing = (key, val) => {
+      if (val === null || val === undefined) {
+        // missing -> defaults
+        if (key === "duolingo" || key === "melab" || key === "pte") return "0"; // not required
+        return "1"; // required
+      }
+      return String(val);
+    };
+
+    const reqFlags = {};
+    Object.keys(rawReq).forEach((k) => {
+      const v = defaultIfMissing(k, rawReq[k]);
+      // Convert to boolean like UI expects
+      reqFlags[k] = v === "1";
+    });
+
+    // Program summary strings (unchanged)
+    const programs = [];
+    const masterCount = convertNumber(programRows[0]?.master_count) || 0;
+    const phdCount = convertNumber(programRows[0]?.phd_count) || 0;
+    const bachelorCount = convertNumber(programRows[0]?.bachelor_count) || 0;
+    if (masterCount > 0) programs.push(`Master: ${masterCount} Programs`);
+    if (phdCount > 0) programs.push(`Ph.D: ${phdCount} Programs`);
+    if (bachelorCount > 0) programs.push(`Bachelor: ${bachelorCount} Programs`);
+
+    // Build response (keep field names your React uses)
     const response = {
       id: school.id,
       name: decodeHtmlEntities(school.name),
       location: `${cleanCountryName}${
         school.state ? `, ${decodeHtmlEntities(school.state)}` : ""
       }`,
+      content: school.content ? decodeHtmlEntities(school.content) : "",
+
       logo: finalLogoUrl,
 
-      ranking: {
-        qs: convertNumber(school.qs_rank),
-        usNews: convertNumber(school.us_news_rank),
-        forbes: convertNumber(school.forbes_rank),
-        shanghai: convertNumber(school.shanghai_rank),
-        the: convertNumber(school.the_rank),
-      },
+      ranking,
 
-      // سازگاری با فرانت فعلی
       programs,
 
-      // خلاصه‌ها (مانند قبل)
-      acceptance: acceptanceRate,
-      graduation: graduationRate,
+      // keep same summary numbers (your UI already reads these)
+      acceptance: typeof acceptanceRate === "number" ? acceptanceRate : "",
+      graduation: typeof graduationRate === "number" ? graduationRate : "",
 
-      // ✅ cost با جزییات کامل + حفظ فیلدهای قبلی
+      // cost block: keep detailed and summary (unchanged keys)
       cost: {
-        inState: totalInState || gradInState || undergradInState || 0, // خلاصهٔ قابل‌نمایش
-        outState: totalOutState || gradOutState || undergradOutState || 0, // خلاصهٔ قابل‌نمایش
+        inState: totalInState || gradInState || undergradInState || 0,
+        outState: totalOutState || gradOutState || undergradOutState || 0,
         undergradInState,
         undergradOutState,
         gradInState,
@@ -773,60 +887,62 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
       description: school.description
         ? decodeHtmlEntities(school.description)
         : "",
-      founded: convertNumber(school.founded) || undefined,
+      founded: toNum(school.founded) ?? undefined,
       type: school.type ? decodeHtmlEntities(school.type) : "",
       address: school.address ? decodeHtmlEntities(school.address) : "",
       phone: school.phone || "",
 
-      // ✅ Test Requirements
+      // EXACT legacy requirement semantics
       testRequirements: {
-        toefl: school.toefl === "1",
-        ielts: school.ielts === "1",
-        duolingo: school.duolingo === "1",
-        melab: school.melab === "1",
-        pte: school.pte === "1",
-        sop: school.sop === "1",
-        transcript: school.transcript === "1",
-        resumeCV: school.resume_cs === "1",
-        recommendations: school.recommendations === "1",
-        applicationForm: school.application_form === "1",
-        applicationFee: school.application_fee === "1",
+        toefl: reqFlags.toefl,
+        ielts: reqFlags.ielts,
+        duolingo: reqFlags.duolingo,
+        melab: reqFlags.melab,
+        pte: reqFlags.pte,
+        sop: reqFlags.sop,
+        transcript: reqFlags.transcript,
+        resumeCV: reqFlags.resume_cs,
+        recommendations: reqFlags.recommendations,
+        applicationForm: reqFlags.application_form,
+        applicationFee: reqFlags.application_fee,
       },
 
-      // ✅ Admissions (کامل)
+      // Admissions block (with both raw counts and computed rates like PHP)
       admissions: {
         men: {
-          numberApplied: menApplied,
-          numberAdmitted: menAdmitted,
+          numberApplied: convertNumber(school.men_number_applied),
+          numberAdmitted: convertNumber(school.men_number_admitted),
           enrolledFullTime: menFT,
           enrolledPartTime: menPT,
         },
         women: {
-          numberApplied: womenApplied,
-          numberAdmitted: womenAdmitted,
+          numberApplied: convertNumber(school.women_number_applied),
+          numberAdmitted: convertNumber(school.women_number_admitted),
           enrolledFullTime: womenFT,
           enrolledPartTime: womenPT,
         },
-        numberEnrolled,
-        acceptanceRate,
-        enrolledRate,
-        graduationRate, // اگر در UI لازم شد
+        numberEnrolled: totalEnrolled,
+        acceptanceRate: acceptanceRate === "" ? "" : acceptanceRate, // '' if invalid
+        enrolledRate: totalYield === "" ? "" : totalYield, // '' if invalid
+        menAcceptanceRate: menAcceptanceRate === "" ? "" : menAcceptanceRate,
+        womenAcceptanceRate:
+          womenAcceptanceRate === "" ? "" : womenAcceptanceRate,
+        menEnrolledRate: menYield === "" ? "" : menYield,
+        womenEnrolledRate: womenYield === "" ? "" : womenYield,
       },
 
-      // ✅ Students (برای تب Students)
+      // Students tab numbers (from dedicated metas, not gender-enrolled sums)
       students: {
-        men: convertNumber(school.men_student),
-        women: convertNumber(school.women_student),
-        fullTime: menFT + womenFT,
-        partTime: menPT + womenPT,
+        men: menStudent,
+        women: womenStudent,
+        fullTime: fullTimeStudent,
+        partTime: partTimeStudent,
         undergrad: undergradeStudent,
         graduate: graduateStudent,
-        total:
-          convertNumber(school.men_student) +
-          convertNumber(school.women_student),
+        total: menStudent + womenStudent,
       },
 
-      // Race & Ethnicity (بدون تغییر)
+      // Race & Ethnicity (pass through)
       race_asian_and_pacific_islander:
         school.race_asian_and_pacific_islander || null,
       race_black: school.race_black || null,
@@ -835,10 +951,10 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
       race_white: school.race_white || null,
       race_other: school.race_other || null,
 
-      favorite: false, // update below
+      favorite: false, // set below
     };
 
-    // 3) favorites (بدون require؛ همون regex فعلی‌ات اوکیه)
+    // 3) favorite flag (unchanged)
     const [userData] = await db.query(
       `SELECT ID FROM qacom_wp_users WHERE user_email = ?`,
       [email]
@@ -859,14 +975,14 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
         favoritesData[0].meta_value
       ) {
         const serializedData = favoritesData[0].meta_value;
-        const arrayPattern = /a:(\d+):{(.*?)}/s;
+        const arrayPattern = /a:(\\d+):{(.*?)}/s;
         const match = serializedData.match(arrayPattern);
         if (match) {
           const favoriteIds = new Set();
-          const itemPattern = /i:(\d+);s:(\d+):"(\d+)";/g;
-          let itemMatch;
-          while ((itemMatch = itemPattern.exec(match[2])) !== null) {
-            favoriteIds.add(itemMatch[3]);
+          const itemPattern = /i:(\\d+);s:(\\d+):"(\\d+)";/g;
+          let m;
+          while ((m = itemPattern.exec(match[2])) !== null) {
+            favoriteIds.add(m[3]);
           }
           response.favorite = favoriteIds.has(String(school.id));
         }

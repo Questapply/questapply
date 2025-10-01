@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { Input } from "../ui/input"; // ⬅️ اضافه شد
 import { studyLevels } from "../../lib/constants/study-options";
 
 interface StudyGoalsProps {
@@ -22,75 +23,106 @@ interface StudyGoalsProps {
   };
 }
 
-// استخراج countryMap از server.js
-const countryMap = {
-  24: "United States",
-  25: "Canada",
+// لیست دستی کشورها
+const countryMap: Record<number, string> = {
+  24: "United States of America (USA)",
+  25: "Canada (CA)",
   233: "England",
   363: "Germany",
   298: "Italy",
+  380: "Australia",
+  528: "Austria",
+  540: "Belgium",
+  490: "Denmark",
+  539: "Finland",
+  393: "France",
+  578: "Ireland",
+  447: "Netherlands",
+  538: "Norway",
+  499: "Spain",
+  460: "Sweden",
+  479: "Switzerland",
 };
 
-// ایجاد آرایه کشورها برای نمایش در select
+// نرمالایزر برای حذف پرانتزها (مثل (USA), (CA))
+const baseName = (name: string) => name.replace(/\s*\([^)]+\)\s*/g, "").trim();
+
+// پرچم کشورها
+function getCountryFlag(countryName: string): string {
+  switch (baseName(countryName).toLowerCase()) {
+    case "united states of america":
+    case "united states":
+    case "usa":
+      return "🇺🇸";
+    case "canada":
+      return "🇨🇦";
+    case "england":
+    case "united kingdom":
+    case "uk":
+      return "🇬🇧";
+    case "germany":
+      return "🇩🇪";
+    case "italy":
+      return "🇮🇹";
+    case "australia":
+      return "🇦🇺";
+    case "austria":
+      return "🇦🇹";
+    case "belgium":
+      return "🇧🇪";
+    case "denmark":
+      return "🇩🇰";
+    case "finland":
+      return "🇫🇮";
+    case "france":
+      return "🇫🇷";
+    case "ireland":
+      return "🇮🇪";
+    case "netherlands":
+      return "🇳🇱";
+    case "norway":
+      return "🇳🇴";
+    case "spain":
+      return "🇪🇸";
+    case "sweden":
+      return "🇸🇪";
+    case "switzerland":
+      return "🇨🇭";
+    default:
+      return "🌍";
+  }
+}
+
+// آپشن‌های کامپوننت Select
 const countryOptions = Object.entries(countryMap).map(([id, name]) => ({
   id,
   name,
   flag: getCountryFlag(name),
 }));
 
-// تابع دریافت پرچم کشور بر اساس نام
-function getCountryFlag(countryName: string): string {
-  const countryFlags: Record<string, string> = {
-    "United States": "🇺🇸",
-    Canada: "🇨🇦",
-    England: "🇬🇧",
-    Germany: "🇩🇪",
-    Italy: "🇮🇹",
-  };
-
-  return countryFlags[countryName] || "🌍";
-}
-
+// (اختیاری) اگر می‌خوای در UI نام بدون پرانتز دیده شود:
+const displayCountryName = (name: string) => baseName(name);
 const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
-  // اضافه کردن log برای بررسی داده‌های دریافتی
-
-  // بررسی و تطبیق level با مقادیر ممکن
   const normalizeLevel = (level: string): string => {
-    // بررسی اینکه آیا level دقیقاً در studyLevels وجود دارد
-    if (studyLevels.includes(level)) {
-      return level;
-    }
-
-    // تطبیق مقادیر مشابه
-    if (
-      level.includes("Ph") ||
-      level.includes("PhD") ||
-      level.includes("Ph.D")
-    ) {
+    if (studyLevels.includes(level)) return level;
+    if (level.includes("Ph") || level.includes("PhD") || level.includes("Ph.D"))
       return "PhD";
-    } else if (level.includes("Master")) {
-      return "Master's Degree";
-    } else if (level.includes("Bachelor")) {
-      return "Bachelor's Degree";
-    }
-
+    if (level.includes("Master")) return "Master's Degree";
+    if (level.includes("Bachelor")) return "Bachelor's Degree";
     return level;
   };
 
-  // استفاده از داده‌های دریافتی از سرور با حالت‌های مختلف ممکن
   const [countryId, setCountryId] = useState<string>(() => {
-    if (typeof data.country === "object" && data.country?.id) {
+    if (typeof data.country === "object" && data.country?.id)
       return String(data.country.id);
-    }
     return "";
   });
 
   const [level, setLevel] = useState(() => normalizeLevel(data.level || ""));
 
   const [fieldId, setFieldId] = useState<string>(() => {
-    if (typeof data.field === "object" && data.field?.id) {
+    if (typeof data.field === "object" && data.field?.id)
       return String(data.field.id);
-    }
     return "";
   });
 
@@ -98,107 +130,77 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
     Array<{ id: string; name: string }>
   >(data.availableFields || []);
 
+  // 🔎 state برای جستجوی فیلد
+  const [fieldSearch, setFieldSearch] = useState("");
+
   const [errors, setErrors] = useState({
     country: false,
     level: false,
     field: false,
   });
 
-  // برای آپدیت داده‌ها وقتی props تغییر می‌کند
   useEffect(() => {
-    // آپدیت countryId
     if (typeof data.country === "object" && data.country?.id) {
       setCountryId(String(data.country.id));
     }
-
-    // آپدیت level با normalization
     if (data.level) {
-      const normalizedLevel = normalizeLevel(data.level);
-      setLevel(normalizedLevel);
+      setLevel(normalizeLevel(data.level));
     }
-
-    // آپدیت fieldId
     if (typeof data.field === "object" && data.field?.id) {
       setFieldId(String(data.field.id));
     }
 
-    // آپدیت availableFields
     if (data.availableFields && data.availableFields.length > 0) {
-      // حذف موارد تکراری از availableFields با استفاده از Map برای اطمینان از یکتا بودن بر اساس ID
-      const uniqueFieldsMap = new Map();
+      const uniqueFieldsMap = new Map<string, { id: string; name: string }>();
       data.availableFields.forEach((field) => {
-        if (field.id) {
-          // اطمینان از اینکه ID همیشه به صورت رشته است
-          const fieldId = String(field.id);
-          uniqueFieldsMap.set(fieldId, { ...field, id: fieldId });
-        }
+        if (field.id)
+          uniqueFieldsMap.set(String(field.id), {
+            ...field,
+            id: String(field.id),
+          });
       });
 
-      // اضافه کردن مقدار انتخاب شده اگر در لیست نیست
       if (typeof data.field === "object" && data.field?.id) {
-        // تبدیل ID به رشته
-        const fieldId = String(data.field.id);
-        if (!uniqueFieldsMap.has(fieldId)) {
-          uniqueFieldsMap.set(fieldId, {
-            id: fieldId,
+        const fid = String(data.field.id);
+        if (!uniqueFieldsMap.has(fid)) {
+          uniqueFieldsMap.set(fid, {
+            id: fid,
             name: data.field.name || "Selected Program",
           });
         }
       }
 
-      // تبدیل Map به آرایه
-      const uniqueFields = Array.from(uniqueFieldsMap.values());
-
-      setAvailableFields(uniqueFields);
-
-      // اگر fieldId قبلاً تنظیم شده باشد اما در availableFields نباشد
+      setAvailableFields(Array.from(uniqueFieldsMap.values()));
       if (typeof data.field === "object" && data.field?.id && !fieldId) {
-        setFieldId(data.field.id);
+        setFieldId(String(data.field.id));
       }
     }
   }, [data]);
 
-  // اضافه کردن useEffect جدید برای اطمینان از وجود مقادیر انتخاب شده در لیست‌ها
   useEffect(() => {
-    // بررسی وجود level در studyLevels
     if (level && level.length > 0) {
       const levelExists = studyLevels.includes(level);
-      if (!levelExists) {
-        const normalizedLevel = normalizeLevel(level);
-        setLevel(normalizedLevel);
-      }
+      if (!levelExists) setLevel(normalizeLevel(level));
     }
 
-    // بررسی وجود field انتخاب شده در لیست
     if (fieldId && availableFields.length > 0) {
       const fieldExists = availableFields.some((field) => field.id === fieldId);
-
       if (
         !fieldExists &&
         typeof data.field === "object" &&
         data.field?.id &&
         data.field?.name
       ) {
-        // افزودن به لیست موجود با استفاده از Map برای حذف موارد تکراری
         setAvailableFields((prev) => {
-          // ایجاد یک Map از آیتم‌های موجود
-          const fieldsMap = new Map();
-          prev.forEach((field) => {
-            // اطمینان از اینکه ID همیشه به صورت رشته است
-            const fieldId = String(field.id);
-            fieldsMap.set(fieldId, { ...field, id: fieldId });
+          const fieldsMap = new Map<string, { id: string; name: string }>();
+          prev.forEach((f) =>
+            fieldsMap.set(String(f.id), { ...f, id: String(f.id) })
+          );
+          const fid = String(data.field.id);
+          fieldsMap.set(fid, {
+            id: fid,
+            name: data.field.name || "Selected Program",
           });
-
-          // افزودن یا جایگزینی آیتم جدید
-          if (data.field?.id) {
-            const fieldId = String(data.field.id);
-            fieldsMap.set(fieldId, {
-              id: fieldId,
-              name: data.field.name || "Selected Program",
-            });
-          }
-
-          // تبدیل Map به آرایه
           return Array.from(fieldsMap.values());
         });
       }
@@ -206,22 +208,11 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
   }, [level, fieldId, availableFields, data.field]);
 
   const handleNext = () => {
-    // Validate
-    const newErrors = {
-      country: !countryId,
-      level: !level,
-      field: !fieldId,
-    };
-
+    const newErrors = { country: !countryId, level: !level, field: !fieldId };
     setErrors(newErrors);
-
     if (!Object.values(newErrors).includes(true)) {
-      // فرمت ارسال داده‌ها به سرور
       onNext({
-        country: {
-          id: String(countryId),
-          name: countryMap[countryId] || "",
-        },
+        country: { id: String(countryId), name: countryMap[countryId] || "" },
         level,
         field: {
           id: String(fieldId),
@@ -232,52 +223,44 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
     }
   };
 
-  const handlePrevious = () => {
-    // Go back to the previous section (Education)
-    onNext({ type: "back" });
-  };
+  const handlePrevious = () => onNext({ type: "back" });
 
-  // Animations
   const containerVariants = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-      },
-    },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } },
   };
-
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0 },
   };
-
   const globeAnimation = {
     hidden: { scale: 0.8, opacity: 0, rotate: -30 },
     show: {
       scale: 1,
       opacity: 1,
       rotate: 0,
-      transition: {
-        type: "spring",
-        stiffness: 260,
-        damping: 20,
-        delay: 0.1,
-      },
+      transition: { type: "spring", stiffness: 260, damping: 20, delay: 0.1 },
     },
   };
 
-  // دریافت نام کشور بر اساس ID
-  const getCountryName = (id: string): string => {
-    return countryMap[id] || "";
-  };
+  const getCountryName = (id: string): string => countryMap[id] || "";
+  const getFieldName = (id: string): string =>
+    availableFields.find((f) => f.id === id)?.name || "";
 
-  // دریافت نام برنامه تحصیلی بر اساس ID
-  const getFieldName = (id: string): string => {
-    const field = availableFields.find((f) => f.id === id);
-    return field ? field.name : "";
-  };
+  // ✅ فیلتر لیست فیلدها بر اساس عبارت جستجو
+  const filteredFields = (() => {
+    // یکتا کردن (مثل قبل)
+    const uniqueMap = new Map<string, { id: string; name: string }>();
+    availableFields.forEach((f) =>
+      uniqueMap.set(String(f.id), { ...f, id: String(f.id) })
+    );
+    let arr = Array.from(uniqueMap.values());
+    if (fieldSearch.trim()) {
+      const q = fieldSearch.trim().toLowerCase();
+      arr = arr.filter((f) => f.name.toLowerCase().includes(q));
+    }
+    return arr;
+  })();
 
   return (
     <div className="p-8">
@@ -306,6 +289,7 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
         </motion.div>
 
         <motion.div variants={itemVariants} className="space-y-6">
+          {/* Country (لیست دستی) */}
           <div className="space-y-2">
             <Label htmlFor="country">
               Which country do you want to study in?
@@ -335,6 +319,7 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
             )}
           </div>
 
+          {/* Level */}
           <div className="space-y-2">
             <Label htmlFor="level">What level do you want to study?</Label>
             <Select value={level} onValueChange={setLevel}>
@@ -361,6 +346,7 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
             )}
           </div>
 
+          {/* Field + Search داخل Select */}
           <div className="space-y-2">
             <Label htmlFor="field">What field do you want to study?</Label>
             <Select value={fieldId} onValueChange={setFieldId}>
@@ -372,44 +358,34 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
               >
                 <SelectValue placeholder="Select field of study" />
               </SelectTrigger>
-              <SelectContent className="max-h-80">
-                {availableFields.length > 0 ? (
-                  (() => {
-                    // بررسی وجود آیتم‌های تکراری قبل از رندر
-                    const fieldIds = availableFields.map((field) => field.id);
-                    const duplicates = fieldIds.filter(
-                      (id, index) => fieldIds.indexOf(id) !== index
-                    );
-                    if (duplicates.length > 0) {
-                      console.error("Duplicate field IDs found:", duplicates);
-                    }
+              <SelectContent
+                side="bottom"
+                position="popper"
+                sideOffset={6}
+                className="max-h-96 overflow-y-auto p-0"
+              >
+                {/* 🔎 نوار جستجو */}
+                <div className="p-2 sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700">
+                  <Input
+                    placeholder="Search field..."
+                    value={fieldSearch}
+                    onChange={(e) => setFieldSearch(e.target.value)}
+                  />
+                </div>
 
-                    // استفاده از Set برای اطمینان از یکتا بودن آیتم‌ها براساس ID
-                    const uniqueFieldsMap = new Map();
-                    availableFields.forEach((field) => {
-                      if (field.id) {
-                        // همیشه تبدیل به رشته
-                        const fieldId = String(field.id);
-                        uniqueFieldsMap.set(fieldId, { ...field, id: fieldId });
-                      }
-                    });
-
-                    // تبدیل به آرایه و مرتب‌سازی
-                    const uniqueFields = Array.from(uniqueFieldsMap.values());
-
-                    return uniqueFields.map((field, index) => (
-                      <SelectItem
-                        // ترکیب index با ID برای اطمینان از یکتا بودن
-                        key={`field-${field.id}-${index}`}
-                        value={field.id}
-                      >
-                        {field.name}
-                      </SelectItem>
-                    ));
-                  })()
+                {/* لیست فیلدها (فیلتر شده) */}
+                {filteredFields.length > 0 ? (
+                  filteredFields.map((field, index) => (
+                    <SelectItem
+                      key={`field-${field.id}-${index}`}
+                      value={field.id}
+                    >
+                      {field.name}
+                    </SelectItem>
+                  ))
                 ) : (
-                  <div className="p-2 text-center text-gray-500">
-                    Loading fields...
+                  <div className="p-3 text-center text-sm text-gray-500">
+                    No results
                   </div>
                 )}
               </SelectContent>
@@ -421,7 +397,7 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
             )}
             {fieldId &&
               availableFields.length > 0 &&
-              !availableFields.some((field) => field.id === fieldId) && (
+              !availableFields.some((f) => f.id === fieldId) && (
                 <p className="text-amber-500 text-sm">
                   Selected field may not be available. Please select again.
                 </p>

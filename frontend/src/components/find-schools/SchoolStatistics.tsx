@@ -10,8 +10,9 @@ interface SchoolStatisticsProps {
 const SchoolStatistics = ({ school }: SchoolStatisticsProps) => {
   // اگر مقادیر undefined/null باشند، ProgressCircle معمولاً خودش هندل می‌کند؛
   // اما برای اطمینان می‌توانیم 0 نمایش بدهیم:
-  const acc = typeof school.acceptance === "number" ? school.acceptance : 0;
-  const grad = typeof school.graduation === "number" ? school.graduation : 0;
+  const acc = typeof school.acceptance === "number" ? school.acceptance : "N/A";
+  const grad =
+    typeof school.graduation === "number" ? school.graduation : "N/A";
 
   return (
     <div className="rounded-lg bg-gray-100/70 dark:bg-gray-800/60 p-3 md:p-4 min-w-0">
