@@ -362,17 +362,20 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
                 side="bottom"
                 position="popper"
                 sideOffset={6}
-                className="max-h-96 overflow-y-auto p-0"
+                align="start"
+                avoidCollisions={false}
+                className=" overflow-hidden p-0"
               >
                 {/* 🔎 نوار جستجو */}
-                <div className="p-2 sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700">
-                  <Input
-                    placeholder="Search field..."
-                    value={fieldSearch}
-                    onChange={(e) => setFieldSearch(e.target.value)}
-                  />
+                <div className="max-h-96 overflow-y-auto">
+                  <div className="p-2 sticky z-10 top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700">
+                    <Input
+                      placeholder="Search field..."
+                      value={fieldSearch}
+                      onChange={(e) => setFieldSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
-
                 {/* لیست فیلدها (فیلتر شده) */}
                 {filteredFields.length > 0 ? (
                   filteredFields.map((field, index) => (

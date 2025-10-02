@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "../ui/progress";
 import { Button } from "../ui/button";
-import { Sun, Moon, ArrowRight } from "lucide-react";
+import { Sun, Moon, ArrowRight, Home, LayoutDashboard } from "lucide-react";
 import { Toggle } from "../ui/toggle";
 import { useToast } from "../ui/use-toast";
 import StepNavigation from "./StepNavigation";
@@ -49,6 +49,7 @@ interface ProfileLayoutProps {
   isDarkMode: boolean;
   onToggleTheme: () => void;
 }
+
 const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
   const location = useLocation();
   const applicationType = location.state?.applicationType || "applyyourself";
@@ -171,18 +172,23 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
     fetchProfileData();
   }, [setProfileCompletionStatus]);
 
-  // useEffect(() => {
-  //   const checkProgress = () => {
-  //     // محاسبه تعداد مراحل تکمیل شده بر اساس شاخص مرحله فعلی
-  //     const currentIndex = steps.findIndex((step) => step.id === currentStep);
+  const completionMap = useMemo(
+    () => computeCompletionMap(formData),
+    [formData]
+  );
+  useEffect(() => {
+    const ids = filteredSteps.map((s) => s.id);
 
-  //     // محاسبه درصد پیشرفت بر اساس مرحله فعلی
-  //     // اگر در مرحله اول هستیم، درصد پیشرفت کمتر است
-  //     setProgress(Math.round((currentIndex / (steps.length - 1)) * 100));
-  //   };
+    // 'complete' را از مخرج حذف می‌کنیم تا قبل از مرحله نهایی هم درصد معنی‌دار باشد
+    const denomIds = ids.filter((id) => id !== "complete");
+    const denom = Math.max(denomIds.length, 1);
 
-  //   checkProgress();
-  // }, [currentStep, steps.length]);
+    const doneCount = denomIds.reduce((acc, id) => {
+      return acc + (completionMap[id as keyof typeof completionMap] ? 1 : 0);
+    }, 0);
+
+    setProgress(Math.round((doneCount / denom) * 100));
+  }, [completionMap, filteredSteps]);
 
   const handleNext = async (data: any) => {
     // Find the current step index
@@ -299,9 +305,9 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
         title: "Profile Almost Complete!",
         description: "Just one more step to finalize your profile.",
       });
-    } else if (currentIndex < steps.length - 2) {
+    } else if (currentIndex < filteredSteps.length - 2) {
       // Move to the next step
-      setCurrentStep(steps[currentIndex + 1].id as ProfileStep);
+      setCurrentStep(filteredSteps[currentIndex + 1].id as ProfileStep);
     }
   };
 
@@ -320,7 +326,34 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
       }`}
     >
       {/* Header with Theme Toggle */}
-      <header className="p-4 flex justify-end">
+      <header className="p-4 flex items-center justify-between md:justify-around">
+        <div className="flex items-center gap-2">
+          {/* وقتی پروفایل کامل نیست: رفتن به صفحه اصلی */}
+          {!profileCompleted && (
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="text-gray-600 dark:text-gray-300"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              Back to Home
+            </Button>
+          )}
+
+          {/* وقتی پروفایل کامل است: رفتن به داشبورد */}
+          {profileCompleted && (
+            <Button
+              variant="outline"
+              onClick={() => navigate("/dashboard")}
+              className="border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-300"
+            >
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Go to Dashboard
+            </Button>
+          )}
+        </div>
+
+        {/* Theme toggle (سمت راست) */}
         <Toggle
           aria-label="Toggle theme"
           pressed={isDarkMode}
