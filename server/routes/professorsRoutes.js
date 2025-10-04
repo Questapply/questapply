@@ -5,7 +5,7 @@ import { authenticateToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-/* Helpers */
+/* ===== Helpers: بدون تغییر در خروجی ===== */
 const decodeHtmlEntities =
   decodeHtmlEntitiesExt ||
   ((s = "") =>
@@ -37,7 +37,7 @@ const booleanSearch = (q) => {
   return tokens.length ? tokens.map((w) => `+${w}*`).join(" ") : null;
 };
 
-/* برای لیبل‌دهی برنامه‌ها توی خروجی (بدون تغییر) */
+/* لیبل سطح‌ها: همان منطق قبلی */
 const LEVEL_CANON = (raw) => {
   const t = String(raw || "").toLowerCase();
   if (
@@ -74,7 +74,7 @@ const sortByLevel = (a, b) =>
   (LEVEL_ORDER[String(a.level || "").toLowerCase()] ?? 99) -
   (LEVEL_ORDER[String(b.level || "").toLowerCase()] ?? 99);
 
-/* Cache سبک */
+/* Cache سبک: همان کلیدها برای سازگاری */
 const cache = new Map();
 const now = () => Date.now();
 const getCache = (k) => {
@@ -91,6 +91,7 @@ const setCache = (k, v, ttlMs) =>
 
 router.get("/find", authenticateToken, async (req, res) => {
   try {
+    /* هدرها: دقیقاً مثل قبل */
     res.set({
       "Cache-Control": "no-cache, no-store, must-revalidate",
       Pragma: "no-cache",
@@ -101,7 +102,7 @@ router.get("/find", authenticateToken, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const offset = (page - 1) * limit;
 
-    // Light mode برای صفحات بعدی
+    // Light mode برای صفحات بعدی (دقیقاً مثل قبل)
     const light =
       req.query.light === "1" || req.query.light === "true" || page > 1;
 
@@ -115,7 +116,7 @@ router.get("/find", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     const userId = userData[0].ID;
 
-    /* userPreferences فقط صفحه ۱ (با کش 5 دقیقه) */
+    /* userPreferences فقط صفحه ۱ (با کش 5 دقیقه) — منطق و شکل خروجی ثابت */
     let userPreferences = {
       country: null,
       level: null,
@@ -127,11 +128,14 @@ router.get("/find", authenticateToken, async (req, res) => {
       availablePrograms: [],
     };
 
+    let programAreaId = null;
+
     if (!light) {
       const cacheKey = `userPrefs:${userId}:v1`;
       const cached = getCache(cacheKey);
       if (cached) {
         userPreferences = cached;
+        // از کش نمی‌توان برنامهٔ area را به‌طور مستقیم گرفت؛ اما همان خروجی حفظ می‌شود
       } else {
         const preferredMetaKeys = [
           "application_country",
@@ -192,8 +196,8 @@ router.get("/find", authenticateToken, async (req, res) => {
         `);
 
         const areaIdsFromQuery = toArr(req.query.areaOfStudy);
-        const programAreaId =
-          areaIdsFromQuery[0] || (await programInfoPromise)?.id;
+        const programAreaIdFromProfile = (await programInfoPromise)?.id;
+        programAreaId = areaIdsFromQuery[0] || programAreaIdFromProfile || null;
 
         const programsListPromise = db.query(
           `
@@ -253,17 +257,16 @@ router.get("/find", authenticateToken, async (req, res) => {
       }
     }
 
-    /* فیلترها */
+    /* فیلترها: بدون تغییر */
     const filters = (() => {
       const base = {
         country: null,
         state: [],
         areaOfStudy: [],
         program: [],
-        school: [], // ← اضافه شد
+        school: [],
         researchInterest: [],
         title: null,
-        // degreeLevel حذف شد
       };
 
       base.country =
@@ -277,7 +280,7 @@ router.get("/find", authenticateToken, async (req, res) => {
         base.areaOfStudy = [String(userPreferences.areaOfStudy.id)];
 
       base.program = toArr(req.query.program);
-      base.school = toArr(req.query.school); // ← چندانتخابی
+      base.school = toArr(req.query.school);
       base.state = toArr(req.query.state);
       base.researchInterest = toArr(req.query.researchInterest);
       base.title = req.query.title || null;
@@ -285,7 +288,7 @@ router.get("/find", authenticateToken, async (req, res) => {
       return base;
     })();
 
-    /* شروط (بهینه با EXISTS؛ بدون LEFT JOIN برای IDs/COUNT) */
+    /* شروط: همان WHERE/ORDER BY قبلی؛ EXISTSها حفظ شده اما JOIN تصویر بهینه شده */
     const bsResearch = booleanSearch(filters.researchInterest);
 
     const whereParts = [`pf.status = 'publish'`];
@@ -322,7 +325,7 @@ router.get("/find", authenticateToken, async (req, res) => {
       idsParams.push(filters.program);
     }
 
-    // **School (جدید)**
+    // School
     if (filters.school.length === 1) {
       whereParts.push(`pf.school_id = ?`);
       idsParams.push(filters.school[0]);
@@ -348,7 +351,7 @@ router.get("/find", authenticateToken, async (req, res) => {
     console.log("[find] SQL where =", whereParts.join(" AND "));
     console.log("[find] params =", idsParams);
 
-    /* IDs و COUNT سریع */
+    /* IDs و COUNT: همان رفتار قبلی (COUNT همیشه انجام می‌شود) */
     const baseIdsPromise = db.query(
       `
       SELECT pf.ID
@@ -393,7 +396,7 @@ router.get("/find", authenticateToken, async (req, res) => {
       return res.send(JSON.stringify(payload));
     }
 
-    /* دیتیل‌ها + ریسرچ + روابط (parallel) */
+    /* دیتیل + ریسرچ + روابط: تصویر را با LEFT JOIN بیاور (بدون تغییر در فیلد خروجی) */
     const detailsPromise = db.query(
       `
       SELECT DISTINCT 
@@ -403,12 +406,19 @@ router.get("/find", authenticateToken, async (req, res) => {
         p.name  AS program_name,
         t_cat.name     AS area_of_study_name,
         t_country.name AS country_name,
-        s.name AS school_name, s.state, s.country
+        s.name AS school_name, s.state, s.country,
+        CASE
+          WHEN pm.meta_value IS NOT NULL
+          THEN CONCAT('https://questapply.com/wp-content/uploads/', pm.meta_value)
+          ELSE NULL
+        END AS image_url
       FROM qacom_wp_apply_faculty pf
       LEFT JOIN qacom_wp_apply_programs p ON pf.program_id = p.id
       LEFT JOIN qacom_wp_terms t_cat     ON p.category_id = t_cat.term_id
       LEFT JOIN qacom_wp_apply_schools s ON pf.school_id = s.id
       LEFT JOIN qacom_wp_terms t_country ON s.country   = t_country.term_id
+      LEFT JOIN qacom_wp_posts imgp ON imgp.id = pf.image
+      LEFT JOIN qacom_wp_postmeta pm ON pm.post_id = imgp.id AND pm.meta_key = '_wp_attached_file'
       WHERE pf.ID IN (?)
       ORDER BY pf.date ASC, pf.name ASC
       `,
@@ -457,35 +467,10 @@ router.get("/find", authenticateToken, async (req, res) => {
       relRowsPromise,
     ]);
 
-    /* تصاویر */
-    const imageIds = professorsRows
-      .map((p) =>
-        typeof p.image === "string" && !isNaN(p.image) && p.image.trim() !== ""
-          ? p.image
-          : null
-      )
-      .filter(Boolean);
+    /* تصاویر: الان از detailsRows.image_url تأمین می‌شود */
+    // (هیچ تغییری در فیلد خروجی image نمی‌دهیم)
 
-    let imageMap = new Map();
-    if (imageIds.length) {
-      const [atts] = await db.query(
-        `
-        SELECT pm.post_id, pm.meta_value
-        FROM qacom_wp_postmeta pm
-        JOIN qacom_wp_posts p ON pm.post_id = p.id
-        WHERE pm.meta_key = '_wp_attached_file' AND p.id IN (?)
-        `,
-        [imageIds]
-      );
-      for (const a of atts) {
-        imageMap.set(
-          String(a.post_id),
-          `https://questapply.com/wp-content/uploads/${a.meta_value}`
-        );
-      }
-    }
-
-    /* Research interests (unique) */
+    /* Research interests (unique): همان regex قبلی */
     const interests = [];
     const re = /s:\d+:"(.*?)";/g;
     for (const ri of riRows) {
@@ -495,7 +480,7 @@ router.get("/find", authenticateToken, async (req, res) => {
     }
     const researchInterests = Array.from(new Set(interests)).sort();
 
-    /* category programs */
+    /* category programs: دقیقاً مثل قبل (پر و گروه‌بندی می‌شود) */
     const categoryForPrograms =
       (filters.areaOfStudy.length ? filters.areaOfStudy[0] : null) ||
       (userPreferences?.areaOfStudy && userPreferences.areaOfStudy.id) ||
@@ -564,7 +549,7 @@ router.get("/find", authenticateToken, async (req, res) => {
       ];
     }
 
-    /* خروجی نهایی */
+    /* خروجی نهایی: بدون افزودن/حذف فیلد */
     const keyOf = (sId, pId) => `${sId}_${pId}`;
     const relMap = new Map();
     for (const r of relRows) {
@@ -581,12 +566,13 @@ router.get("/find", authenticateToken, async (req, res) => {
 
     const professors = professorsRows.map((p) => {
       let imageUrl = p.image;
+      // اگر image عددی بود، URL join‌شده را استفاده کن
       if (
         typeof p.image === "string" &&
-        !isNaN(imageUrl) &&
-        imageUrl.trim() !== ""
+        !isNaN(p.image) &&
+        String(p.image).trim() !== ""
       ) {
-        imageUrl = imageMap.get(String(imageUrl)) || null;
+        imageUrl = p.image_url || null;
       } else if (!imageUrl || String(imageUrl).trim() === "") {
         imageUrl = null;
       }

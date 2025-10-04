@@ -50,9 +50,10 @@ export type SopSampleBundle = {
  * Base URLs & headers
  * ========================= */
 export const API_URL =
-  import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ||
+  "http://localhost:5000/api";
 
-export const SOP_BASE = `${URL}/sop`;
+export const SOP_BASE = `${API_URL}/sop`;
 
 function authHeaders(extra: Record<string, string> = {}) {
   const token = localStorage.getItem("token");

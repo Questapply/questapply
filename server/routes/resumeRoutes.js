@@ -347,6 +347,202 @@ router.delete("/resume/:resumeId", authenticateToken, async (req, res) => {
 });
 
 /* ------------------------- POST /export --------------------------- */
+// router.post("/export", authenticateToken, async (req, res) => {
+//   try {
+//     const {
+//       resume_id,
+//       template_id: bodyTemplateId,
+//       format = "pdf",
+//     } = req.body || {};
+//     if (!resume_id)
+//       return res.status(400).json({ error: "resume_id is required" });
+
+//     // 1) user_id
+//     const [u] = await db.execute(
+//       "SELECT ID FROM qacom_wp_users WHERE user_email=?",
+//       [req.user.email]
+//     );
+//     const userId = u?.[0]?.ID;
+//     if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+//     // 2) سکشن‌ها برای همین کاربر+رزومه
+//     const [rows] = await db.execute(
+//       `SELECT section, content, template_id
+//          FROM qacom_wp_user_resume
+//         WHERE user_id=? AND resume_id=?
+//         ORDER BY created_at ASC`,
+//       [userId, resume_id]
+//     );
+//     if (!rows?.length)
+//       return res.status(404).json({ error: "Resume not found" });
+
+//     // 3) templateId مؤثر: body → ذخیره‌شده → دیفالت
+//     const storedTemplateId =
+//       rows.find((r) => r.template_id)?.template_id || rows[0].template_id || 80;
+//     const effectiveTemplateId = Number.isFinite(+bodyTemplateId)
+//       ? +bodyTemplateId
+//       : storedTemplateId;
+//     res.setHeader("X-Template-Used", String(effectiveTemplateId));
+
+//     // 4) sections
+//     const sections = {};
+//     for (const r of rows) {
+//       const v = r.content;
+//       try {
+//         const p = typeof v === "string" ? JSON.parse(v) : v;
+//         sections[r.section] = p?.content ?? p?.text ?? p ?? "";
+//       } catch {
+//         sections[r.section] = v ?? "";
+//       }
+//     }
+
+//     // 5) داده‌ها برای تمپلیت
+//     const p = parsePersonal(sections.personal);
+//     const personal_line2 = [p.title, p.city, p.phone, p.email, p.linkedin]
+//       .map(clean)
+//       .filter(Boolean)
+//       .join(" | ");
+
+//     const templateData = {
+//       personal_name: clean(p.name),
+//       personal_line2,
+//       summary: clean(sections.summary),
+//       interests: clean(sections.interests),
+//       education: clean(sections.education),
+//       experience: clean(sections.experience),
+//       publications: clean(sections.publications),
+//       skills: clean(sections.skills),
+//       awards: clean(sections.awards),
+//       memberships: clean(sections.memberships),
+//       hobbies: clean(sections.hobbies),
+//       refs: clean(sections.refs),
+//     };
+
+//     // 6) بارگذاری و Merge
+//     const templatePath = path.resolve(
+//       __dirname,
+//       "..",
+//       "templates",
+//       `${effectiveTemplateId}.docx`
+//     );
+//     const buf = fs.readFileSync(templatePath);
+//     const isZipLike =
+//       Buffer.isBuffer(buf) &&
+//       buf.length > 4 &&
+//       buf[0] === 0x50 &&
+//       buf[1] === 0x4b;
+//     if (!isZipLike) {
+//       console.error("Template is not a valid DOCX (zip)", {
+//         templatePath,
+//         size: buf.length,
+//         head: buf.slice(0, 16).toString("hex"),
+//         effectiveTemplateId,
+//       });
+//       return res.status(500).json({
+//         error: "Template file is not a valid DOCX (zip).",
+//         templatePath,
+//         effectiveTemplateId,
+//       });
+//     }
+
+//     const zip = new PizZip(buf);
+//     const doc = new Docxtemplater(zip, {
+//       paragraphLoop: true,
+//       linebreaks: true,
+//       delimiters: { start: "{{", end: "}}" },
+//     });
+
+//     let outDocx;
+//     try {
+//       doc.render(templateData);
+//       outDocx = doc.getZip().generate({ type: "nodebuffer" });
+//     } catch (e) {
+//       console.error(
+//         "Docx render error:",
+//         JSON.stringify(e.properties || e, null, 2)
+//       );
+//       return res.status(500).json({ error: "Docx render error: Multi error" });
+//     }
+
+//     // 7) خروجی
+//     const fmt = String(format).toLowerCase();
+
+//     if (fmt === "doc" || fmt === "docx") {
+//       res.setHeader(
+//         "Content-Type",
+//         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+//       );
+//       res.setHeader(
+//         "Content-Disposition",
+//         `attachment; filename="resume-${resume_id}.docx"`
+//       );
+//       return res.end(outDocx);
+//     }
+
+//     if (fmt === "pdf") {
+//       const tmpDir = path.resolve(__dirname, "..", "tmp");
+//       if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+//       const docxPath = path.join(tmpDir, `resume-${resume_id}.docx`);
+//       const pdfPath = path.join(tmpDir, `resume-${resume_id}.pdf`);
+//       fs.writeFileSync(docxPath, outDocx);
+
+//       const sofficePath = getSofficePath();
+
+//       try {
+//         await execFileAsync(sofficePath, [
+//           "--headless",
+//           "--nologo",
+//           "--nodefault",
+//           "--nofirststartwizard",
+//           "--nolockcheck",
+//           "--norestore",
+//           "--convert-to",
+//           "pdf:writer_pdf_Export",
+//           "--outdir",
+//           tmpDir,
+//           docxPath,
+//         ]);
+//       } catch (convErr) {
+//         console.error("LibreOffice convert error:", convErr);
+//         return res.status(500).json({
+//           error:
+//             "PDF export failed (LibreOffice missing or wrong path). Set LIBREOFFICE_PATH.",
+//         });
+//       }
+
+//       if (!fs.existsSync(pdfPath)) {
+//         return res
+//           .status(500)
+//           .json({ error: "PDF export failed (output not found)" });
+//       }
+
+//       const pdf = fs.readFileSync(pdfPath);
+//       res.setHeader("Content-Type", "application/pdf");
+//       res.setHeader(
+//         "Content-Disposition",
+//         `inline; filename="resume-${resume_id}.pdf"`
+//       );
+//       return res.end(pdf);
+//     }
+
+//     // txt fallback
+//     const txt = Object.entries(sections)
+//       .map(([k, v]) => `${String(k).toUpperCase()}\n${toStr(v)}\n`)
+//       .join("\n");
+//     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename="resume-${resume_id}.txt"`
+//     );
+//     return res.send(txt);
+//   } catch (err) {
+//     console.error("EXPORT ERROR:", err);
+//     return res.status(500).json({ error: String(err?.message || err) });
+//   }
+// });
+
+/*--------------------------------POST /export for PaaS -------------------*/
 router.post("/export", authenticateToken, async (req, res) => {
   try {
     const {
@@ -365,7 +561,7 @@ router.post("/export", authenticateToken, async (req, res) => {
     const userId = u?.[0]?.ID;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    // 2) سکشن‌ها برای همین کاربر+رزومه
+    // 2) sections
     const [rows] = await db.execute(
       `SELECT section, content, template_id
          FROM qacom_wp_user_resume
@@ -376,7 +572,7 @@ router.post("/export", authenticateToken, async (req, res) => {
     if (!rows?.length)
       return res.status(404).json({ error: "Resume not found" });
 
-    // 3) templateId مؤثر: body → ذخیره‌شده → دیفالت
+    // 3) templateId
     const storedTemplateId =
       rows.find((r) => r.template_id)?.template_id || rows[0].template_id || 80;
     const effectiveTemplateId = Number.isFinite(+bodyTemplateId)
@@ -384,7 +580,7 @@ router.post("/export", authenticateToken, async (req, res) => {
       : storedTemplateId;
     res.setHeader("X-Template-Used", String(effectiveTemplateId));
 
-    // 4) sections
+    // 4) build sections obj
     const sections = {};
     for (const r of rows) {
       const v = r.content;
@@ -396,7 +592,7 @@ router.post("/export", authenticateToken, async (req, res) => {
       }
     }
 
-    // 5) داده‌ها برای تمپلیت
+    // 5) data for template
     const p = parsePersonal(sections.personal);
     const personal_line2 = [p.title, p.city, p.phone, p.email, p.linkedin]
       .map(clean)
@@ -418,13 +614,96 @@ router.post("/export", authenticateToken, async (req, res) => {
       refs: clean(sections.refs),
     };
 
-    // 6) بارگذاری و Merge
+    // ******** NEW: تعیین فرمت و HTML preview قبل از DOCX merge
+    const fmt = String(format || "").toLowerCase();
+
+    // 6-a) HTML inline preview (for PaaS / preview only; no download)
+    if (fmt === "html") {
+      const esc = (s) =>
+        String(s ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
+
+      const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Resume Preview</title>
+<style>
+  /* اجبار به تم روشن داخل iframe */
+  html, body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    margin: 24px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  /* جلوی مداخله‌ی تم تیره مرورگر/اکستنشن‌ها را بگیر */
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #ffffff !important; color: #111111 !important; }
+  }
+
+  .name { font-size: 28px; font-weight: 700; }
+  .line2 { color: #555; margin-top: 4px; font-size: 14px; }
+  h2 { margin: 20px 0 8px; font-size: 16px; text-transform: uppercase; letter-spacing: .04em; color: #222; }
+  .sec { white-space: pre-wrap; line-height: 1.5; font-size: 14px; color: #222; }
+  hr { border: 0; border-top: 1px solid #ddd; margin: 16px 0; }
+</style>
+</head>
+<body>
+  <div class="name">${esc(templateData.personal_name)}</div>
+  <div class="line2">${esc(personal_line2)}</div>
+  ${[
+    ["Summary", templateData.summary],
+    ["Education", templateData.education],
+    ["Experience", templateData.experience],
+    ["Publications", templateData.publications],
+    ["Skills", templateData.skills],
+    ["Awards", templateData.awards],
+    ["Memberships", templateData.memberships],
+    ["Interests", templateData.interests],
+    ["Hobbies", templateData.hobbies],
+    ["References", templateData.refs],
+  ]
+    .map(([title, content]) =>
+      content
+        ? `<hr/><h2>${esc(title)}</h2><div class="sec">${esc(content)}</div>`
+        : ""
+    )
+    .join("")}
+</body>
+</html>`;
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="resume-${resume_id}.html"`
+      );
+      return res.send(html);
+    }
+    // ******** END HTML preview
+
+    // 6-b) از اینجا به بعد فقط زمانی اجرا می‌شود که HTML نخواستیم: DOCX merge
     const templatePath = path.resolve(
       __dirname,
       "..",
       "templates",
       `${effectiveTemplateId}.docx`
     );
+    if (!fs.existsSync(templatePath)) {
+      console.error("Template file not found:", templatePath);
+      return res
+        .status(500)
+        .json({ error: "Template file not found", templatePath });
+    }
     const buf = fs.readFileSync(templatePath);
     const isZipLike =
       Buffer.isBuffer(buf) &&
@@ -464,10 +743,16 @@ router.post("/export", authenticateToken, async (req, res) => {
       return res.status(500).json({ error: "Docx render error: Multi error" });
     }
 
-    // 7) خروجی
-    const fmt = String(format).toLowerCase();
+    // 7) outputs: prefer requested, fallback if needed
+    const ALLOW_PDF =
+      String(process.env.EXPORT_ALLOW_PDF || "").toLowerCase() === "true";
+    const DEFAULT_FORMAT = (
+      process.env.EXPORT_DEFAULT_FORMAT || "docx"
+    ).toLowerCase();
+    const requestedFmt = String(format || "").toLowerCase() || DEFAULT_FORMAT;
 
-    if (fmt === "doc" || fmt === "docx") {
+    // DOCX branch (safe everywhere)
+    if (requestedFmt === "doc" || requestedFmt === "docx") {
       res.setHeader(
         "Content-Type",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -479,54 +764,38 @@ router.post("/export", authenticateToken, async (req, res) => {
       return res.end(outDocx);
     }
 
-    if (fmt === "pdf") {
-      const tmpDir = path.resolve(__dirname, "..", "tmp");
-      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-
-      const docxPath = path.join(tmpDir, `resume-${resume_id}.docx`);
-      const pdfPath = path.join(tmpDir, `resume-${resume_id}.pdf`);
-      fs.writeFileSync(docxPath, outDocx);
-
-      const sofficePath = getSofficePath();
-
-      try {
-        await execFileAsync(sofficePath, [
-          "--headless",
-          "--nologo",
-          "--nodefault",
-          "--nofirststartwizard",
-          "--nolockcheck",
-          "--norestore",
-          "--convert-to",
-          "pdf:writer_pdf_Export",
-          "--outdir",
-          tmpDir,
-          docxPath,
-        ]);
-      } catch (convErr) {
-        console.error("LibreOffice convert error:", convErr);
-        return res.status(500).json({
-          error:
-            "PDF export failed (LibreOffice missing or wrong path). Set LIBREOFFICE_PATH.",
-        });
+    // PDF branch (only if allowed; در تست به DOCX فالبک می‌کنیم)
+    if (requestedFmt === "pdf") {
+      if (!ALLOW_PDF) {
+        // fallback to DOCX (no LibreOffice requirement)
+        res.setHeader("X-Format-Fallback", "pdf->docx");
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="resume-${resume_id}.docx"`
+        );
+        return res.end(outDocx);
       }
 
-      if (!fs.existsSync(pdfPath)) {
-        return res
-          .status(500)
-          .json({ error: "PDF export failed (output not found)" });
-      }
-
-      const pdf = fs.readFileSync(pdfPath);
-      res.setHeader("Content-Type", "application/pdf");
+      // اگر PDF فعال است ولی تبدیل را فعلاً استفاده نمی‌کنیم، باز هم فالبک امن به DOCX:
+      res.setHeader("X-Format-Fallback", "pdf->docx(disabled)");
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      );
       res.setHeader(
         "Content-Disposition",
-        `inline; filename="resume-${resume_id}.pdf"`
+        `attachment; filename="resume-${resume_id}.docx"`
       );
-      return res.end(pdf);
+      return res.end(outDocx);
+
+      // ---- اگر بعداً خواستی تبدیل واقعی را فعال کنی، بلاک LibreOffice را اینجا برگردان و در نهایت return کن. ----
     }
 
-    // txt fallback
+    // txt fallback (rare)
     const txt = Object.entries(sections)
       .map(([k, v]) => `${String(k).toUpperCase()}\n${toStr(v)}\n`)
       .join("\n");

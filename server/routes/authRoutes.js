@@ -1,87 +1,223 @@
+// routes/auth.js  (یا authRoutes.js) — فقط روت /login را با این نسخه جایگزین کن
 import express from "express";
 import db from "../config/db.config.js";
 import wordpressHash from "wordpress-hash-node";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 dotenv.config();
-
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "your-secure-jwt-secret";
+const md5 = (s) => crypto.createHash("md5").update(s, "utf8").digest("hex");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secure-jwt-secret"; // مطمئن شوید که این متغیر از .env خوانده می‌شود
+// --- یک verify چند‌طرحه و fail-safe ---
+async function verifyPassword(inputPassword, storedHashRaw) {
+  const hash = String(storedHashRaw ?? "").trim();
 
-// API endpoint for login
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
+  // 1) PHPPass (WordPress)
   try {
-    const [users] = await db.query(
-      `
-      SELECT id, user_email, user_pass
-      FROM qacom_wp_users
-      WHERE user_email = ?`,
+    if (
+      hash.startsWith("$P$") ||
+      hash.startsWith("$H$") ||
+      hash.length === 34
+    ) {
+      if (wordpressHash.CheckPassword(inputPassword, hash))
+        return { ok: true, scheme: "phpass" };
+      if (wordpressHash.CheckPassword(md5(inputPassword), hash))
+        return { ok: true, scheme: "phpass-md5-prehash" };
+    } else {
+      // حتی اگر پیشوند واضح نبود یک‌بار امتحانش کن
+      if (wordpressHash.CheckPassword(inputPassword, hash))
+        return { ok: true, scheme: "phpass-unguessed" };
+    }
+  } catch {}
+
+  // 2) bcrypt با پیشوند $wp$
+  try {
+    if (hash.startsWith("$wp$")) {
+      const normalized = hash.replace(/^\$wp\$/, "$"); // $wp$2y$ → $2y$
+      if (await bcrypt.compare(inputPassword, normalized))
+        return { ok: true, scheme: "wp-bcrypt" };
+      if (await bcrypt.compare(md5(inputPassword), normalized))
+        return { ok: true, scheme: "wp-bcrypt-md5-prehash" };
+    }
+  } catch {}
+
+  // 3) bcrypt استاندارد
+  try {
+    if (/^\$2[aby]\$/.test(hash)) {
+      if (await bcrypt.compare(inputPassword, hash))
+        return { ok: true, scheme: "bcrypt" };
+      if (await bcrypt.compare(md5(inputPassword), hash))
+        return { ok: true, scheme: "bcrypt-md5-prehash" };
+    }
+  } catch {}
+
+  // 4) MD5 legacy
+  try {
+    if (/^[a-f0-9]{32}$/i.test(hash)) {
+      if (md5(inputPassword).toLowerCase() === hash.toLowerCase())
+        return { ok: true, scheme: "md5" };
+    }
+  } catch {}
+
+  return { ok: false, scheme: null };
+}
+
+// --- /login ---
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body || {};
+  try {
+    // 1) کاربر را با alias یکنواخت بخوان
+    const [rows] = await db.query(
+      `SELECT ID AS userId, user_email AS email, user_pass AS hash
+         FROM qacom_wp_users
+        WHERE user_email = ?
+        LIMIT 1`,
       [email]
     );
-
-    if (!users || users.length === 0) {
+    if (!rows?.length)
       return res.status(401).json({ error: "Invalid email or password" });
-    }
 
-    const user = users[0];
+    const user = rows[0];
+    const userId = user.userId;
+    const stored = String(user.hash ?? "").trim();
 
-    const userId = user.ID || user.id;
+    // 2) تطبیق چند‌طرحه
+    const result = await verifyPassword(password, stored);
 
-    if (!userId) {
-      return res
-        .status(500)
-        .json({ error: "User ID not found in database response" });
-    }
-
-    const isPasswordValid = wordpressHash.CheckPassword(
-      password,
-      user.user_pass
-    );
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    const [userMetas] = await db.query(
-      `SELECT meta_key, meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key IN ('profile_education', 'application_country', 'application_level', 'application_english_test')`,
-      [user.id]
-    );
-
-    const metaData = {};
-    userMetas.forEach((meta) => {
-      metaData[meta.meta_key] = meta.meta_value;
+    // لاگ تشخیصی کامل (به کنسول سرور می‌رود، نه کلاینت)
+    console.log("login.verify", {
+      email,
+      prefix: stored.slice(0, 6),
+      len: stored.length,
+      scheme: result.scheme,
+      ok: result.ok,
     });
 
-    const requiredMetaKeys = [
+    if (!result.ok)
+      return res.status(401).json({ error: "Invalid email or password" });
+
+    // 3) مهاجرت به PHPPass اگر غیر از phpass بود
+    if (!String(result.scheme).startsWith("phpass")) {
+      try {
+        const newWpHash = wordpressHash.HashPassword(password);
+        await db.query(`UPDATE qacom_wp_users SET user_pass = ? WHERE ID = ?`, [
+          newWpHash,
+          userId,
+        ]);
+      } catch (e) {
+        console.warn("login.rehashFail", e?.message);
+      }
+    }
+
+    // 4) متاها
+    const [userMetas] = await db.query(
+      `SELECT meta_key, meta_value
+         FROM qacom_wp_usermeta
+        WHERE user_id = ?
+          AND meta_key IN ('profile_education','application_country','application_level','application_english_test')`,
+      [userId]
+    );
+    const meta = {};
+    for (const m of userMetas) meta[m.meta_key] = m.meta_value;
+    const required = [
       "profile_education",
       "application_country",
       "application_level",
       "application_english_test",
     ];
-    const isProfileComplete = requiredMetaKeys.every(
-      (key) => metaData[key] && metaData[key] !== ""
-    );
+    const isProfileComplete = required.every((k) => meta[k] && meta[k] !== "");
 
-    const token = jwt.sign({ email: user.user_email }, JWT_SECRET, {
+    const token = jwt.sign({ email: user.email, userId }, JWT_SECRET, {
       expiresIn: "1h",
     });
 
-    res.json({
+    return res.json({
       message: "Login successful",
       token,
-      user: { email: user.user_email },
+      user: { email: user.email, userId },
       isProfileComplete,
     });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Internal server error", details: error.message });
+  } catch (err) {
+    console.error("auth.login.error", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
+// API endpoint for login
+// router.post("/login", async (req, res) => {
+//   const { email, password } = req.body;
+
+//   try {
+//     const [users] = await db.query(
+//       `
+//       SELECT id, user_email, user_pass
+//       FROM qacom_wp_users
+//       WHERE user_email = ?`,
+//       [email]
+//     );
+
+//     if (!users || users.length === 0) {
+//       return res.status(401).json({ error: "Invalid email or password" });
+//     }
+
+//     const user = users[0];
+
+//     const userId = user.ID || user.id;
+
+//     if (!userId) {
+//       return res
+//         .status(500)
+//         .json({ error: "User ID not found in database response" });
+//     }
+
+//     const isPasswordValid = wordpressHash.CheckPassword(
+//       password,
+//       user.user_pass
+//     );
+
+//     if (!isPasswordValid) {
+//       return res.status(401).json({ error: "Invalid email or password" });
+//     }
+
+//     const [userMetas] = await db.query(
+//       `SELECT meta_key, meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key IN ('profile_education', 'application_country', 'application_level', 'application_english_test')`,
+//       [user.id]
+//     );
+
+//     const metaData = {};
+//     userMetas.forEach((meta) => {
+//       metaData[meta.meta_key] = meta.meta_value;
+//     });
+
+//     const requiredMetaKeys = [
+//       "profile_education",
+//       "application_country",
+//       "application_level",
+//       "application_english_test",
+//     ];
+//     const isProfileComplete = requiredMetaKeys.every(
+//       (key) => metaData[key] && metaData[key] !== ""
+//     );
+
+//     const token = jwt.sign({ email: user.user_email }, JWT_SECRET, {
+//       expiresIn: "1h",
+//     });
+
+//     res.json({
+//       message: "Login successful",
+//       token,
+//       user: { email: user.user_email },
+//       isProfileComplete,
+//     });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .json({ error: "Internal server error", details: error.message });
+//   }
+// });
 
 // API endpoint for signup
 router.post("/signup", async (req, res) => {

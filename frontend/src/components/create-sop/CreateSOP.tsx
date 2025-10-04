@@ -31,7 +31,9 @@ import { Textarea } from "../ui/textarea";
 import ProgressCircle from "../ui/progress-circle";
 import { Badge } from "../ui/badge";
 import SampleSopGallery from "@/components/create-sop/SampleSopGallery";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = (
+  import.meta.env.VITE_API_URL?.toString() || "http://localhost:5000/api"
+).replace(/\/+$/, "");
 /* =========================================================
    TABS (kept as in original — label remains "My SOP")
    ========================================================= */
@@ -837,9 +839,20 @@ const CreateSOP = () => {
       const response = await fetch(`${API_URL}/sop/sample`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok)
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        const t = await response.text().catch(() => "");
+        throw new Error(
+          `GET /sop/sample → ${response.status} ${t.slice(0, 120)}`
+        );
+      }
+      const ct = response.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        const t = await response.text().catch(() => "");
+        throw new Error(`Expected JSON, got ${ct}: ${t.slice(0, 120)}`);
+      }
+
       const data: SOPSample[] = await response.json();
+      console.log("Sampel:", data);
       const processedData = data.map((t) => ({
         ...t,
         name: t.name || `SOP Sample ${t.id}`,

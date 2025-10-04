@@ -1006,7 +1006,7 @@ router.get("/lor/sample", authenticateToken, async (req, res) => {
       LEFT JOIN \`${WP_POSTS}\` AS p ON p.ID = lor.file
       ${whereSql}
       ORDER BY COALESCE(lor.date,'1970-01-01') DESC, lor.id DESC
-      LIMIT ? OFFSET ?
+       LIMIT ${limit} OFFSET ${offset}
     `,
       [...params, limit, offset]
     );

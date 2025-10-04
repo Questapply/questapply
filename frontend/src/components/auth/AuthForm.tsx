@@ -117,7 +117,7 @@ const AuthForm = ({ mode, onToggleMode, isDarkMode }: AuthFormProps) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || errorMessage);
+        throw new Error(errorData.error || errorData.message || errorMessage);
       }
 
       const data = await response.json();
