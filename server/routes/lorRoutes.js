@@ -998,7 +998,7 @@ router.get("/lor/sample", authenticateToken, async (req, res) => {
     );
     const total = Number(cntRows?.[0]?.cnt || 0);
 
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `
       SELECT lor.id, lor.type, lor.level, lor.program_id, lor.date,
              p.guid AS file_url, p.post_title AS title
@@ -1006,7 +1006,7 @@ router.get("/lor/sample", authenticateToken, async (req, res) => {
       LEFT JOIN \`${WP_POSTS}\` AS p ON p.ID = lor.file
       ${whereSql}
       ORDER BY COALESCE(lor.date,'1970-01-01') DESC, lor.id DESC
-       LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `,
       [...params, limit, offset]
     );

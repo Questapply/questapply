@@ -224,7 +224,7 @@ router.get("/sample", authenticateToken, async (req, res) => {
 
     // --------- 6) items
     const itemsParams = [...params, limit, offset];
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `
       SELECT
         sop.ID AS id,
