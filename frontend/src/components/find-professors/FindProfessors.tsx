@@ -3124,12 +3124,7 @@ const FindProfessors = () => {
             </h2>
           </div>
 
-          <div
-            className="grid
-    grid-cols-[repeat(2,max-content)]
-    md:grid-cols-[repeat(4,max-content)]
-    gap-2 md:gap-6 justify-center"
-          >
+          <div className="flex flex-wrap items-center gap-2 md:gap-4">
             {/* Country (single) */}
             <FilterDropdown
               label="Country"

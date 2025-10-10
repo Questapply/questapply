@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Info,
@@ -9,16 +9,30 @@ import {
   User,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
-import StrengthsHighlighter from "./StrengthsHighlighter";
+
 import AIHumanizer from "./AIHumanizer";
-import ProfessionalTone from "./ProfessionalTone";
+
 import AIImprovement from "./AIImprovement";
 import LORSamples from "./LORSamples";
 import LORGuidance from "./LORGuidance";
 import MyLORs from "./MyLORs";
-
+import LORMethodModal from "./LORMethodModal";
 const CreateLOR = () => {
   const [activeTab, setActiveTab] = useState("guidance");
+  const [myLorStage, setMyLorStage] = useState<
+    "idle" | "gate" | "self" | "other"
+  >("idle");
+  const [gateOpen, setGateOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === "mylors") {
+      setMyLorStage("gate");
+      setGateOpen(true);
+    } else {
+      setMyLorStage("idle");
+      setGateOpen(false);
+    }
+  }, [activeTab]);
 
   return (
     <motion.div
@@ -72,20 +86,7 @@ const CreateLOR = () => {
             <Sparkles className="w-4 h-4" />
             <span>AI Improvement</span>
           </TabsTrigger>
-          <TabsTrigger
-            value="strengths"
-            className="flex items-center gap-1.5 flex-1 data-[state=active]:border-b-2 data-[state=active]:border-b-teal-500 data-[state=active]:text-teal-500 rounded-none border-b-2 border-transparent transition-all"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Highlight Strengths</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="tone"
-            className="flex items-center gap-1.5 flex-1 data-[state=active]:border-b-2 data-[state=active]:border-b-teal-500 data-[state=active]:text-teal-500 rounded-none border-b-2 border-transparent transition-all"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Professional Tone</span>
-          </TabsTrigger>
+
           <TabsTrigger
             value="humanizer"
             className="flex items-center gap-1.5 flex-1 data-[state=active]:border-b-2 data-[state=active]:border-b-teal-500 data-[state=active]:text-teal-500 rounded-none border-b-2 border-transparent transition-all"
@@ -104,19 +105,31 @@ const CreateLOR = () => {
         </TabsContent>
 
         <TabsContent value="mylors" className="pt-4">
-          <MyLORs />
+          {myLorStage === "gate" && (
+            <LORMethodModal
+              isOpen={gateOpen}
+              onClose={() => {
+                setGateOpen(false);
+                setActiveTab("guidance"); // بستن مودال ⇒ خروج از تب
+              }}
+              onSelect={(m) => {
+                setGateOpen(false);
+                setMyLorStage(m === "other" ? "other" : "self");
+              }}
+            />
+          )}
+
+          {myLorStage === "self" && (
+            <MyLORs initialCreateNew /* شروع مستقیم با Builder */ />
+          )}
+
+          {myLorStage === "other" && (
+            <MyLORs initialRoute="recommender" /* شروع با فرم معرف */ />
+          )}
         </TabsContent>
 
         <TabsContent value="improvement" className="pt-4">
           <AIImprovement />
-        </TabsContent>
-
-        <TabsContent value="strengths" className="pt-4">
-          <StrengthsHighlighter />
-        </TabsContent>
-
-        <TabsContent value="tone" className="pt-4">
-          <ProfessionalTone />
         </TabsContent>
 
         <TabsContent value="humanizer" className="pt-4">

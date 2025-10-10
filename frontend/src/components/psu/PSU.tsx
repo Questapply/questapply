@@ -461,11 +461,11 @@ function PSU() {
         </div>
         <div className="text-xs text-muted-foreground hidden md:block">
           <div className="flex items-center gap-2">
-            <Link to="/my-account" className="hover:underline">
+            <Link to="/" className="hover:underline">
               Home
             </Link>
             <span>/</span>
-            <Link to="/apply-now" className="hover:underline">
+            <Link to="/dashboard/apply-now" className="hover:underline">
               Applications
             </Link>
             <span>/</span>
@@ -477,48 +477,100 @@ function PSU() {
       </div>
 
       {/* Steps (Roadmap) */}
-      <div className="relative flex justify-between bg-gray-50 dark:bg-gray-900/30 p-4 rounded-lg">
-        {steps.map((step, i) => (
-          <div key={step.key} className="flex flex-col items-center relative">
-            <button
-              type="button"
-              onClick={() => scrollToSection(step.key)}
-              className={[
-                "w-8 h-8 rounded-full flex items-center justify-center z-10 border",
-                step.status === "completed"
-                  ? "bg-green-500 text-white border-green-500"
-                  : step.status === "current"
-                  ? "bg-blue-500 text-white border-blue-500"
-                  : step.status === "skipped"
-                  ? "bg-gray-300 text-gray-500 border-gray-300"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600",
-              ].join(" ")}
-              title={step.label}
-            >
-              {step.status === "completed" ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <span>{i + 1}</span>
-              )}
-            </button>
-            <span className="text-xs mt-2 text-center w-32 truncate">
-              {step.label}
-            </span>
 
-            {i < steps.length - 1 && (
-              <div
+      <div className="relative bg-gray-50 dark:bg-gray-900/30 p-4 rounded-lg">
+        {/* 🔹 موبایل: 3 ستون، چند ردیف؛ زیر هر استپ یک خط وضعیت */}
+        <div className="grid grid-cols-3 gap-4 md:hidden">
+          {steps.map((step, i) => {
+            const btnBase =
+              "w-9 h-9 rounded-full flex items-center justify-center border transition-colors";
+            const btnColor =
+              step.status === "completed"
+                ? "bg-green-500 text-white border-green-500"
+                : step.status === "current"
+                ? "bg-blue-500 text-white border-blue-500"
+                : step.status === "skipped"
+                ? "bg-gray-300 text-gray-500 border-gray-300"
+                : "bg-gray-200 dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600";
+
+            const barColor =
+              step.status === "completed"
+                ? "bg-green-500"
+                : step.status === "current"
+                ? "bg-blue-500"
+                : "bg-gray-200 dark:bg-gray-700";
+
+            return (
+              <div key={step.key} className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(step.key)}
+                  className={`${btnBase} ${btnColor}`}
+                  title={step.label}
+                  aria-current={step.status === "current" ? "step" : undefined}
+                >
+                  {step.status === "completed" ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <span className="text-sm">{i + 1}</span>
+                  )}
+                </button>
+
+                <span className="text-[11px] mt-2 text-center w-24 truncate">
+                  {step.label}
+                </span>
+
+                {/* نوار وضعیتِ زیر هر استپ */}
+                <div className={`mt-2 h-[2px] w-full rounded ${barColor}`} />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 🔸 دسکتاپ: همون کد قبلی خودت (بدون تغییر) */}
+        <div className="hidden md:flex justify-between">
+          {steps.map((step, i) => (
+            <div key={step.key} className="flex flex-col items-center relative">
+              <button
+                type="button"
+                onClick={() => scrollToSection(step.key)}
                 className={[
-                  "absolute top-4 left-1/2 w-full h-[2px]",
-                  steps[i].status === "completed" &&
-                  (steps[i + 1].status === "completed" ||
-                    steps[i + 1].status === "current")
-                    ? "bg-green-500"
-                    : "bg-gray-200 dark:bg-gray-700",
+                  "w-8 h-8 rounded-full flex items-center justify-center z-10 border",
+                  step.status === "completed"
+                    ? "bg-green-500 text-white border-green-500"
+                    : step.status === "current"
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : step.status === "skipped"
+                    ? "bg-gray-300 text-gray-500 border-gray-300"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600",
                 ].join(" ")}
-              />
-            )}
-          </div>
-        ))}
+                title={step.label}
+              >
+                {step.status === "completed" ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <span>{i + 1}</span>
+                )}
+              </button>
+              <span className="text-xs mt-2 text-center w-32 truncate">
+                {step.label}
+              </span>
+
+              {i < steps.length - 1 && (
+                <div
+                  className={[
+                    "absolute top-4 left-1/2 w-full h-[2px]",
+                    steps[i].status === "completed" &&
+                    (steps[i + 1].status === "completed" ||
+                      steps[i + 1].status === "current")
+                      ? "bg-green-500"
+                      : "bg-gray-200 dark:bg-gray-700",
+                  ].join(" ")}
+                />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -546,7 +598,7 @@ function PSU() {
                   </Badge>
                 </div>
                 <Link
-                  to={`/program/${program?.id}`}
+                  to={`/dashboard/programs/${program?.id}`}
                   className="text-blue-600 hover:underline text-sm"
                 >
                   View program details

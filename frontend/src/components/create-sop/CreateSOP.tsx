@@ -1,25 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "../ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { motion } from "framer-motion";
-import MySOP from "./MySOP";
-import {
-  BookOpen,
-  FileText,
-  Bot,
-  Wand,
-  University,
-  Trophy,
-  FileSearch,
-  Clipboard,
-  Send,
-  Download,
-  RotateCcw,
-  Sparkles,
-  Scissors,
-  Expand,
-  Target,
-} from "lucide-react";
+import { BookOpen, FileText, Bot, Wand, Clipboard } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -30,10 +13,17 @@ import {
 import { Textarea } from "../ui/textarea";
 import ProgressCircle from "../ui/progress-circle";
 import { Badge } from "../ui/badge";
-import SampleSopGallery from "@/components/create-sop/SampleSopGallery";
+
+// NEW: تفکیک‌شده‌ها را به جای MySOP ایمپورت کن
+import SOPEditor from "./SOPEditor";
+import SopChatPanel from "./SopChatPanel";
+
+import SampleSopGallery from "./SampleSopGallery";
+
 const API_URL = (
   import.meta.env.VITE_API_URL?.toString() || "http://localhost:5000/api"
 ).replace(/\/+$/, "");
+
 /* =========================================================
    TABS (kept as in original — label remains "My SOP")
    ========================================================= */
@@ -47,16 +37,6 @@ const sopTabs = [
     icon: <Wand className="w-4 h-4" />,
   },
   {
-    id: "universityMatch",
-    name: "Match with University",
-    icon: <University className="w-4 h-4" />,
-  },
-  {
-    id: "successStories",
-    name: "Success Stories",
-    icon: <Trophy className="w-4 h-4" />,
-  },
-  {
     id: "aiHumanizer",
     name: "AI Humanizer",
     icon: <Bot className="w-4 h-4" />,
@@ -64,7 +44,7 @@ const sopTabs = [
 ];
 
 /* =========================================================
-   Guidance steps (used by Guidance tab from original code)
+   Guidance steps (unchanged)
    ========================================================= */
 const sopSteps = [
   {
@@ -105,709 +85,8 @@ const sopSteps = [
 ];
 
 /* =========================================================
-   CreateSOPBuilder (NEW) — from your second code
-   Only used inside TabsContent value="createSOP" (My SOP)
+   Types for Samples tab (unchanged)
    ========================================================= */
-
-const initialSections = {
-  hook: {
-    title: "Hook",
-    hint: "80–120 words, problem/motivation",
-    content:
-      "In a world increasingly driven by data and artificial intelligence, I find myself captivated by the intersection of technology and human understanding. My journey into computer science began with a simple question: how can we build systems that not only process information but truly comprehend and assist human decision-making? This fundamental curiosity has shaped my academic pursuits and research interests, leading me to seek advanced study in machine learning and natural language processing.",
-  },
-  segue: {
-    title: "Segue",
-    hint: "bridge to academic background",
-    content:
-      "This passion for bridging technology and human cognition naturally led me to pursue rigorous academic training in computer science, where I could explore both the theoretical foundations and practical applications of intelligent systems.",
-  },
-  achievements: {
-    title: "Academic Achievements",
-    hint: "3–5 impactful items with numbers",
-    content:
-      "During my undergraduate studies, I maintained a 3.8 GPA while conducting research that resulted in 2 peer-reviewed publications in top-tier conferences. I led a team of 5 students in developing an innovative natural language processing system that achieved 94% accuracy in sentiment analysis, outperforming existing models by 12%. Additionally, I was awarded the Dean's List recognition for 6 consecutive semesters and received the Outstanding Computer Science Student Award in my senior year.",
-  },
-  extracurricular: {
-    title: "Extracurricular Activities",
-    hint: "volunteering/teaching/etc.",
-    content:
-      "Beyond academics, I dedicated 200+ hours to teaching programming to underrepresented youth through the Code for All initiative. I also served as president of the AI Ethics Society, organizing symposiums that attracted over 300 participants from industry and academia. My volunteer work includes mentoring 15 high school students in STEM fields and contributing to open-source machine learning libraries used by over 10,000 developers worldwide.",
-  },
-  publications: {
-    title: "Publications",
-    hint: "concise if any",
-    content:
-      "Smith, J., & Doe, A. (2023). 'Advancing Natural Language Understanding Through Contextual Embeddings.' Proceedings of the International Conference on Machine Learning, 45(2), 123-135.\n\nDoe, A., Johnson, K., & Smith, J. (2023). 'Ethical Considerations in Large Language Model Deployment.' Journal of AI Ethics, 8(3), 67-89.",
-  },
-  problems: {
-    title: "Problems in Background",
-    hint: "challenges/lessons learned",
-    content:
-      "One significant challenge I encountered was during my research internship when our initial approach to bias detection in language models consistently failed to meet accuracy benchmarks. Rather than abandoning the project, I spent months studying fairness metrics and collaborated with social scientists to understand the nuanced nature of algorithmic bias. This experience taught me the importance of interdisciplinary collaboration and resilient problem-solving, ultimately leading to a breakthrough that became the foundation for my thesis work.",
-  },
-  whySchool: {
-    title: "Why This School?",
-    hint: "labs/professors/fit",
-    content:
-      "Stanford's AI Lab, particularly Dr. Sarah Chen's work on interpretable machine learning, aligns perfectly with my research interests in developing transparent AI systems. The Human-Centered AI Institute's interdisciplinary approach, combining computer science with cognitive psychology and ethics, provides the exact environment I need to pursue my goal of creating AI that genuinely serves human needs. Additionally, the opportunity to collaborate with the Stanford NLP Group and access to cutting-edge computational resources would be invaluable for my research.",
-  },
-  goal: {
-    title: "Your Goal/Conclusion",
-    hint: "short-term/long-term goals",
-    content:
-      "In the short term, I aim to contribute to groundbreaking research in explainable AI while completing my PhD at Stanford. My long-term vision is to establish a research lab focused on developing AI systems that are not only powerful but also transparent, fair, and aligned with human values. I believe that through rigorous academic training and collaborative research, I can help shape the future of artificial intelligence to benefit society as a whole.",
-  },
-};
-
-type MessageSender = "user" | "ai";
-interface Message {
-  sender: MessageSender;
-  content: string;
-}
-interface Snapshot {
-  id: string;
-  timestamp: Date;
-  sections: typeof initialSections;
-}
-
-const CreateSOPBuilder = () => {
-  const [tone, setTone] = useState<"formal" | "friendly" | "story">("formal");
-  const [sections, setSections] = useState(initialSections);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      sender: "ai",
-      content:
-        "Welcome! I'm here to help you create an outstanding Statement of Purpose. You can ask me to improve specific sections, adjust the tone, or make any other changes you'd like.",
-    },
-  ]);
-  const [inputValue, setInputValue] = useState("");
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [wordCount, setWordCount] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const totalWords = Object.values(sections).reduce((total, section) => {
-      return (
-        total +
-        (section.content
-          ? section.content.split(" ").filter((w) => w.length > 0).length
-          : 0)
-      );
-    }, 0);
-    setWordCount(totalWords);
-  }, [sections]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const processMessage = (message: string): string => {
-    const lower = message.toLowerCase();
-
-    let target = "segue";
-    if (lower.includes("hook")) target = "hook";
-    else if (lower.includes("achievement") || lower.includes("academic"))
-      target = "achievements";
-    else if (lower.includes("publication")) target = "publications";
-    else if (lower.includes("why") || lower.includes("school"))
-      target = "whySchool";
-    else if (lower.includes("goal") || lower.includes("conclusion"))
-      target = "goal";
-    else if (lower.includes("extracurricular")) target = "extracurricular";
-    else if (lower.includes("problem") || lower.includes("challenge"))
-      target = "problems";
-
-    let mode = "improve";
-    if (lower.includes("shorten")) mode = "shorten";
-    else if (lower.includes("expand")) mode = "expand";
-    else if (lower.includes("align")) mode = "align";
-
-    applySectionChange(target, mode);
-    return `✅ ${mode} applied on **${target}**.`;
-  };
-
-  const applySectionChange = (sectionKey: string, mode: string) => {
-    setSections((prev) => {
-      const section = (prev as any)[sectionKey];
-      if (!section) return prev;
-
-      let newContent = section.content;
-
-      switch (mode) {
-        case "shorten": {
-          const words = newContent.split(" ");
-          const targetLength = Math.max(18, Math.floor(words.length * 0.7));
-          newContent =
-            words.slice(0, targetLength).join(" ") +
-            (words.length > targetLength ? "..." : "");
-          break;
-        }
-        case "expand":
-          if (sectionKey === "hook") {
-            newContent +=
-              " This early experience revealed the profound impact that well-designed technology can have on human potential.";
-          } else if (sectionKey === "achievements") {
-            newContent +=
-              " These experiences have prepared me to tackle complex research challenges in graduate school.";
-          } else {
-            newContent +=
-              " This foundation has shaped my research perspective and academic approach.";
-          }
-          break;
-        case "align":
-          if (sectionKey === "whySchool") {
-            newContent +=
-              " I am particularly excited about the opportunity to work with Professor Johnson's lab on neural network interpretability research.";
-          }
-          break;
-        case "improve":
-        default:
-          if (tone === "friendly") {
-            newContent = newContent
-              .replace(/Furthermore,/g, "What's more,")
-              .replace(/Additionally,/g, "I'm also excited that");
-          } else if (tone === "story") {
-            newContent =
-              "Looking back, " +
-              newContent.charAt(0).toLowerCase() +
-              newContent.slice(1);
-          }
-          break;
-      }
-
-      return {
-        ...prev,
-        [sectionKey]: {
-          ...section,
-          content: newContent,
-        },
-      };
-    });
-  };
-
-  const sendMessage = () => {
-    if (!inputValue.trim()) return;
-    setMessages((prev) => [...prev, { sender: "user", content: inputValue }]);
-    setTimeout(() => {
-      const response = processMessage(inputValue);
-      setMessages((prev) => [...prev, { sender: "ai", content: response }]);
-    }, 600);
-    setInputValue("");
-  };
-
-  const handleQuickAction = (action: string) => {
-    let targetSection = "";
-    let mode = "improve";
-
-    if (action === "Improve Hook") {
-      targetSection = "hook";
-      mode = "improve";
-    } else if (action === "Expand Why This School") {
-      targetSection = "whySchool";
-      mode = "expand";
-    } else if (action === "Shorten Publications") {
-      targetSection = "publications";
-      mode = "shorten";
-    }
-
-    applySectionChange(targetSection, mode);
-    setMessages((prev) => [
-      ...prev,
-      { sender: "ai", content: `✅ ${mode} applied on **${targetSection}**.` },
-    ]);
-  };
-
-  const saveSnapshot = () => {
-    const snapshot: Snapshot = {
-      id: `SOP-${String(snapshots.length + 1).padStart(3, "0")}`,
-      timestamp: new Date(),
-      sections: { ...sections },
-    };
-    setSnapshots((prev) => [...prev, snapshot]);
-    setMessages((prev) => [
-      ...prev,
-      { sender: "ai", content: `📸 Snapshot saved as ${snapshot.id}` },
-    ]);
-  };
-
-  const resetSections = () => {
-    setSections(initialSections);
-    setMessages((prev) => [
-      ...prev,
-      { sender: "ai", content: "🔄 Draft reset." },
-    ]);
-  };
-
-  const exportTxt = () => {
-    let content = "# Statement of Purpose Draft\n\n";
-    Object.entries(sections).forEach(([_, section]) => {
-      content += `## ${section.title}\n\n${section.content}\n\n`;
-    });
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sop_draft.txt";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const updateSectionContent = (sectionKey: string, newContent: string) => {
-    setSections((prev) => ({
-      ...prev,
-      [sectionKey]: {
-        ...prev[sectionKey as keyof typeof prev],
-        content: newContent,
-      },
-    }));
-  };
-
-  const getSectionWordCount = (content: string) =>
-    content ? content.split(" ").filter((w) => w.length > 0).length : 0;
-
-  return (
-    <div
-      className="min-h-screen"
-      style={
-        {
-          "--sop-bg": "#0b1020",
-          "--sop-panel": "#111827",
-          "--sop-card": "#0e1526",
-          "--sop-border": "#25324a",
-          "--sop-chip": "#0b213a",
-          "--sop-text": "#e5e7eb",
-          "--sop-sub": "#9ca3af",
-          "--sop-brand": "#7c3aed",
-          "--sop-ok": "#22c55e",
-          "--sop-warn": "#f59e0b",
-        } as React.CSSProperties
-      }
-    >
-      {/* Sticky Header */}
-      <div
-        className="sticky top-0 z-20 border-b"
-        style={{
-          backgroundColor: "var(--sop-panel)",
-          borderColor: "var(--sop-border)",
-        }}
-      >
-        <div className="px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Badge
-              variant="secondary"
-              className="text-xs px-2 py-1"
-              style={{
-                backgroundColor: "var(--sop-chip)",
-                color: "var(--sop-text)",
-              }}
-            >
-              QuestApply • AI Demo
-            </Badge>
-            <h1
-              className="text-xl font-semibold"
-              style={{ color: "var(--sop-text)" }}
-            >
-              Create SOP
-            </h1>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Layout */}
-      <div
-        className="max-w-7xl mx-auto p-6"
-        style={{ backgroundColor: "var(--sop-bg)" }}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 h-[calc(100vh-120px)]">
-          {/* LEFT - Chat Panel */}
-          <div
-            className="lg:col-span-1 rounded-xl border flex flex-col h-full"
-            style={{
-              backgroundColor: "var(--sop-panel)",
-              borderColor: "var(--sop-border)",
-            }}
-          >
-            {/* Chat Header */}
-            <div
-              className="p-4 border-b"
-              style={{ borderColor: "var(--sop-border)" }}
-            >
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <Select
-                  value={tone}
-                  onValueChange={(v: "formal" | "friendly" | "story") =>
-                    setTone(v)
-                  }
-                >
-                  <SelectTrigger
-                    className="w-full"
-                    style={{
-                      backgroundColor: "var(--sop-card)",
-                      borderColor: "var(--sop-border)",
-                      color: "var(--sop-text)",
-                    }}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="formal">Tone: Formal</SelectItem>
-                    <SelectItem value="friendly">Tone: Friendly</SelectItem>
-                    <SelectItem value="story">Tone: Narrative</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Badge
-                  className="text-xs whitespace-nowrap px-2 py-1"
-                  style={{
-                    backgroundColor: "var(--sop-chip)",
-                    color: "var(--sop-text)",
-                  }}
-                >
-                  Draft v1 • Skeleton
-                </Badge>
-              </div>
-
-              <Button
-                onClick={saveSnapshot}
-                variant="outline"
-                size="sm"
-                className="w-full"
-                style={{
-                  borderColor: "var(--sop-border)",
-                  color: "var(--sop-text)",
-                }}
-              >
-                Save Snapshot
-              </Button>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`flex ${
-                    m.sender === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                      m.sender === "user"
-                        ? "rounded-br-none"
-                        : "rounded-bl-none"
-                    }`}
-                    style={{
-                      backgroundColor:
-                        m.sender === "user"
-                          ? "var(--sop-brand)"
-                          : "var(--sop-card)",
-                      color: "var(--sop-text)",
-                    }}
-                  >
-                    {m.content}
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Quick Actions */}
-            <div
-              className="p-4 border-t space-y-2"
-              style={{ borderColor: "var(--sop-border)" }}
-            >
-              <div
-                className="text-xs font-medium mb-2"
-                style={{ color: "var(--sop-sub)" }}
-              >
-                Quick Actions:
-              </div>
-              {[
-                "Improve Hook",
-                "Expand Why This School",
-                "Shorten Publications",
-              ].map((action) => (
-                <Button
-                  key={action}
-                  onClick={() => handleQuickAction(action)}
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start text-xs"
-                  style={{
-                    borderColor: "var(--sop-border)",
-                    color: "var(--sop-sub)",
-                  }}
-                >
-                  {action}
-                </Button>
-              ))}
-            </div>
-
-            {/* Input */}
-            <div
-              className="p-4 border-t"
-              style={{ borderColor: "var(--sop-border)" }}
-            >
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                  placeholder="e.g., Improve Academic Achievements with metrics"
-                  className="flex-1 px-3 py-2 rounded-lg border text-sm"
-                  style={{
-                    backgroundColor: "var(--sop-card)",
-                    borderColor: "var(--sop-border)",
-                    color: "var(--sop-text)",
-                  }}
-                />
-                <Button
-                  onClick={sendMessage}
-                  size="sm"
-                  className="px-3"
-                  style={{ backgroundColor: "var(--sop-brand)" }}
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT - Document Panel */}
-          <div
-            className="lg:col-span-2 rounded-xl border overflow-hidden"
-            style={{
-              backgroundColor: "var(--sop-panel)",
-              borderColor: "var(--sop-border)",
-            }}
-          >
-            {/* Toolbar */}
-            <div
-              className="p-4 border-b flex items-center justify-between"
-              style={{ borderColor: "var(--sop-border)" }}
-            >
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="text-xs"
-                  style={{
-                    backgroundColor: "var(--sop-chip)",
-                    borderColor: "var(--sop-border)",
-                    color: "var(--sop-text)",
-                  }}
-                >
-                  Target: CS Ph.D. • Stanford
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="text-xs"
-                  style={{
-                    backgroundColor: "var(--sop-chip)",
-                    borderColor: "var(--sop-border)",
-                    color: "var(--sop-text)",
-                  }}
-                >
-                  Words ~ {wordCount}
-                </Badge>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  onClick={resetSections}
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  style={{
-                    borderColor: "var(--sop-border)",
-                    color: "var(--sop-sub)",
-                  }}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset
-                </Button>
-                <Button
-                  onClick={exportTxt}
-                  size="sm"
-                  className="gap-1"
-                  style={{ backgroundColor: "var(--sop-brand)" }}
-                >
-                  <Download className="w-3 h-3" />
-                  Export .txt
-                </Button>
-              </div>
-            </div>
-
-            {/* Sections */}
-            <div className="overflow-y-auto h-[calc(100%-80px)] p-4 space-y-4">
-              {Object.entries(sections).map(([key, section]) => (
-                <div
-                  key={key}
-                  className="border rounded-xl p-4"
-                  style={{
-                    backgroundColor: "var(--sop-card)",
-                    borderColor: "var(--sop-border)",
-                  }}
-                >
-                  {/* Section Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <h3
-                        className="font-medium"
-                        style={{ color: "var(--sop-text)" }}
-                      >
-                        {section.title}
-                      </h3>
-                      <span
-                        className="text-xs"
-                        style={{ color: "var(--sop-sub)" }}
-                      >
-                        {section.hint}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className="text-xs"
-                        style={{
-                          backgroundColor: "var(--sop-chip)",
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-text)",
-                        }}
-                      >
-                        {key}
-                      </Badge>
-                    </div>
-
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => applySectionChange(key, "improve")}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs gap-1"
-                        style={{
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-sub)",
-                        }}
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        Improve
-                      </Button>
-                      <Button
-                        onClick={() => applySectionChange(key, "shorten")}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs gap-1"
-                        style={{
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-sub)",
-                        }}
-                      >
-                        <Scissors className="w-3 h-3" />
-                        Shorten
-                      </Button>
-                      <Button
-                        onClick={() => applySectionChange(key, "expand")}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs gap-1"
-                        style={{
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-sub)",
-                        }}
-                      >
-                        <Expand className="w-3 h-3" />
-                        Expand
-                      </Button>
-                      {key === "whySchool" && (
-                        <Button
-                          onClick={() => applySectionChange(key, "align")}
-                          variant="outline"
-                          size="sm"
-                          className="text-xs gap-1"
-                          style={{
-                            borderColor: "var(--sop-border)",
-                            color: "var(--sop-sub)",
-                          }}
-                        >
-                          <Target className="w-3 h-3" />
-                          Align to School
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div>
-                      <Textarea
-                        value={section.content}
-                        onChange={(e) =>
-                          updateSectionContent(key, e.target.value)
-                        }
-                        className="min-h[120px] min-h-[120px] resize-none text-sm"
-                        style={{
-                          backgroundColor: "var(--sop-bg)",
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-text)",
-                        }}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div
-                        className="min-h-[120px] p-3 rounded-lg border-2 border-dashed text-sm"
-                        style={{
-                          borderColor: "var(--sop-border)",
-                          color: "var(--sop-sub)",
-                        }}
-                      >
-                        <div
-                          className="text-xs font-medium mb-2"
-                          style={{ color: "var(--sop-sub)" }}
-                        >
-                          Preview:
-                        </div>
-                        {section.content}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          style={{
-                            borderColor: "var(--sop-border)",
-                            color: "var(--sop-sub)",
-                          }}
-                        >
-                          Save
-                        </Button>
-                        <span
-                          className="text-xs"
-                          style={{ color: "var(--sop-sub)" }}
-                        >
-                          Word ~ {getSectionWordCount(section.content)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* =========================================================
-   Main CreateSOP (keeps all other tabs unchanged)
-   Only the My SOP tab renders <CreateSOPBuilder />
-   ========================================================= */
-
 interface SOPSample {
   id: number;
   file: string;
@@ -819,6 +98,10 @@ interface SOPSample {
   point?: boolean;
 }
 
+/* =========================================================
+   Main CreateSOP (keeps all other tabs unchanged)
+   Only the My SOP tab renders Chat + Editor (split)
+   ========================================================= */
 const CreateSOP = () => {
   const [fetchedTemplates, setFetchedTemplates] = useState<SOPSample[]>([]);
   const [activeTab, setActiveTab] = useState("guidance");
@@ -852,7 +135,6 @@ const CreateSOP = () => {
       }
 
       const data: SOPSample[] = await response.json();
-      console.log("Sampel:", data);
       const processedData = data.map((t) => ({
         ...t,
         name: t.name || `SOP Sample ${t.id}`,
@@ -893,7 +175,7 @@ const CreateSOP = () => {
         className="w-full"
       >
         <div className="relative border-b border-gray-200 dark:border-gray-700">
-          <TabsList className="w-full h-auto px-2 py-1 bg-transparent overflow-x-auto flex justify-start">
+          <TabsList className="w-full h-auto px-2 py-1 bg-transparent overflow-x-auto flex justify-around">
             {sopTabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
@@ -924,9 +206,18 @@ const CreateSOP = () => {
           </TabsList>
         </div>
 
-        {/* My SOP (REPLACED) */}
-        <TabsContent value="createSOP" className="m-0">
-          <MySOP />
+        {/* My SOP — حالا 1/3 چت + 2/3 ادیتور */}
+        <TabsContent value="createSOP" className="m-0 h-full">
+          <div className="max-w-full mx-auto p-6 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:h-[calc(100vh-120px)] md:overflow-hidden">
+              <div className="lg:col-span-1 min-h-0 flex flex-col">
+                <SopChatPanel />
+              </div>
+              <div className="lg:col-span-2 min-h-0 flex flex-col">
+                <SOPEditor />
+              </div>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Guidance Tab (unchanged) */}
@@ -995,12 +286,12 @@ const CreateSOP = () => {
           </div>
         </TabsContent>
 
-        {/* Samples Tab (unchanged, keeps API + filters) */}
+        {/* Samples Tab (unchanged; همچنان از API می‌خواند) */}
         <TabsContent value="samples" className="m-0">
           <SampleSopGallery />
         </TabsContent>
 
-        {/* AI Improvement (unchanged) */}
+        {/* AI Improvement (placeholder — همان قبلی) */}
         <TabsContent value="aiImprovement" className="m-0">
           <div className="p-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
@@ -1077,34 +368,6 @@ const CreateSOP = () => {
                   </p>
                 </div>
               </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* University Match (unchanged placeholder) */}
-        <TabsContent value="universityMatch" className="m-0">
-          <div className="p-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold mb-4">
-                University Match Coming Soon
-              </h2>
-              <p className="text-gray-600">
-                Match your SOP with specific university requirements.
-              </p>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Success Stories (unchanged placeholder) */}
-        <TabsContent value="successStories" className="m-0">
-          <div className="p-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold mb-4">
-                Success Stories Coming Soon
-              </h2>
-              <p className="text-gray-600">
-                Read about successful applications and their SOPs.
-              </p>
             </div>
           </div>
         </TabsContent>

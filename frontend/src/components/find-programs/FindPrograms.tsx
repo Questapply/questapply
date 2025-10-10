@@ -877,6 +877,28 @@ const FindPrograms = () => {
       ? clean.slice(0, max) + "…"
       : clean || "Untitled chat";
   }
+  useEffect(() => {
+    const handler = (e: any) => {
+      const { programId, action, programList } = e.detail || {};
+      // اگر خودت programList محلی داری:
+      if (Array.isArray(programList)) {
+        setProgramList(programList.map(String));
+      } else if (programId && action) {
+        setProgramList((prev) => {
+          const set = new Set(prev.map(String));
+          if (action === "remove") set.delete(String(programId));
+          if (action === "add") set.add(String(programId));
+          return Array.from(set);
+        });
+      }
+    };
+    window.addEventListener("program-list:update", handler as EventListener);
+    return () =>
+      window.removeEventListener(
+        "program-list:update",
+        handler as EventListener
+      );
+  }, []);
 
   useEffect(() => {
     const userMsgs = chatMessages.filter((m) => m.type === "user");
@@ -1059,12 +1081,7 @@ const FindPrograms = () => {
             </h2>
           </div>
 
-          <div
-            className="grid
-    grid-cols-[repeat(2,max-content)]
-    md:grid-cols-[repeat(4,max-content)]
-    gap-2 md:gap-6 justify-center"
-          >
+          <div className="flex flex-wrap items-center gap-2 md:gap-4">
             {/* Country (single) */}
             <FilterDropdown
               label="Country"

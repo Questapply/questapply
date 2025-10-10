@@ -24,6 +24,7 @@ import statesRoutes from "./routes/statesRoutes.js";
 import imageProxyRoutes from "./routes/imageProxyRoutes.js";
 import submissionRoutes from "./routes/submissionRoutes.js";
 import paymentsRouter from "./routes/paymentsRouter.js";
+import notificationsRoutes from "./routes/notificationsRoutes.js";
 import { authenticateToken } from "./middleware/authMiddleware.js";
 
 dotenv.config();
@@ -126,6 +127,9 @@ app.use("/api", statesRoutes);
 
 // Use submission routes
 app.use("/api", submissionRoutes);
+
+//Use Notifications Routes
+app.use("/api", notificationsRoutes);
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 

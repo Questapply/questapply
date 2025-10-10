@@ -32,7 +32,7 @@ export default function ChatHeader({
   const top = sessions.slice(0, maxLocalToShow);
 
   return (
-    <div className="border-b px-4 py-3 rounded-t-lg border-border bg-muted/50 flex-shrink-0">
+    <div className="border-b px-4 py-3 rounded-t-lg border-border bg-muted/50 flex-shrink-0 w-full">
       <div className="flex flex-col gap-3">
         {/* عنوان + توضیح (بالا) */}
         <div className="flex items-center gap-3">
@@ -50,7 +50,7 @@ export default function ChatHeader({
         </div>
 
         {/* دکمه‌ها (زیرِ متن) */}
-        <div className="flex items-center gap-2">
+        <div className="flex justify-around items-center gap-2">
           <Button
             onClick={onNewChat}
             className="h-8 bg-primary hover:bg-primary/90 text-primary-foreground"

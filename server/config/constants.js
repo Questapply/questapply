@@ -45,8 +45,8 @@ export function buildUploadsUrl(raw = "") {
 }
 
 export const countryMap = {
-  24: "United States",
-  25: "Canada",
+  24: "United States of America (USA)",
+  25: "Canada (CA)",
   233: "England",
   363: "Germany",
   298: "Italy",

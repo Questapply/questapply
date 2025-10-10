@@ -81,7 +81,7 @@ const ApplicationStatus = ({
       <Button
         variant="outline"
         size="icon"
-        className="text-gray-400 hover:text-gray-600 bg-gray-800 md:w-24 md:px-10 border "
+        className="text-gray-400 w-28 hover:text-gray-600 bg-gray-900 md:w-24 md:px-10 border "
         onClick={toggleDetails}
       >
         {isExpanded ? (

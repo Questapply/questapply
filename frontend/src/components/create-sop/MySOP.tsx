@@ -37,7 +37,7 @@ import {
 
 /* ------------------- defaults for quick initial fill (UI keys) ------------------- */
 const SECTION_DEFAULTS: Record<SectionKey, string> = {
-  hook: "In a world increasingly driven by data and AI, my curiosity has always been how technology can truly augment human decisions. That curiosity pushed me toward ML and NLP.",
+  hook: "m a world increasingly driven by data and AI, my curiosity has always been how technology can truly augment human decisions. That curiosity pushed me toward ML and NLP.",
   segue:
     "This passion led me to pursue rigorous training in computer science, exploring both theory and real-world applications of intelligent systems.",
   academic:

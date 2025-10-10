@@ -49,7 +49,7 @@ const EnglishDropdown = ({
     s.length > maxLabelChars ? s.slice(0, maxLabelChars) + "…" : s;
 
   return (
-    <div className={cn("inline-block", fixedWidthClass)}>
+    <div className={cn("inline-block")}>
       <DropdownMenu>
         <div className="flex items-center gap-1 px-3 rounded-full !py-1.5 text-[13px] md:text-sm border bg-white dark:bg-gray-800 w-full">
           <DropdownMenuTrigger asChild disabled={disabled}>

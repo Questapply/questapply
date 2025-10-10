@@ -33,6 +33,17 @@ export async function listResumes() {
   return res.json(); // [{id,title,updated_at,status,size,file_type,...}]
 }
 
+export async function prefillResume() {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${BASE}/prefill`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) throw new Error(`Prefill HTTP ${res.status}`);
+  return res.json(); // { sections, context }
+}
+
 // (preview/edit)
 export async function getResume(resumeId: string) {
   const token = localStorage.getItem("token");

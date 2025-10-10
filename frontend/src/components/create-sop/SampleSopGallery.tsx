@@ -170,7 +170,7 @@ export default function SampleSopGallery() {
         </h2>
 
         {/* Filters + button */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-around gap-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
             {/* Degree Level */}
             <div className="w-full md:w-72">

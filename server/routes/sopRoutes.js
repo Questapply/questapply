@@ -9,6 +9,7 @@ import {
   serialize as phpSerialize,
   unserialize as phpUnserialize,
 } from "php-serialize";
+import { countryMap } from "../config/constants.js"; // مسیرت را درست کن
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -27,10 +28,13 @@ const UPLOAD_BASE_URL =
 /* ===================== جداول وردپرسی ===================== */
 const WP_USERS = "qacom_wp_users";
 const WP_USERMETA = "qacom_wp_usermeta";
+// Lookups
+const T_PROGRAMS = "qacom_wp_apply_programs"; // ID, name
+const T_SCHOOLS = "qacom_wp_apply_schools"; // ID, name
 
 /* ===================== سکشن‌ها و نگاشت کلیدهای usermeta ===================== */
 const SECTION_TITLES = {
-  country: "Target / Program / Country",
+  country: "Country / Program / Level / University",
   hook: "Hook",
   segue: "Segue (Journey / Motivation)",
   academic: "Academic Achievements",
@@ -40,9 +44,17 @@ const SECTION_TITLES = {
   why: "Why This School?",
   goal: "Your Goal / Conclusion",
 };
+
 const SECTION_KEYS = Object.keys(SECTION_TITLES);
 const toMetaKey = (k) => `${k}_sop_meta`; // مثال: hook -> hook_sop_meta
-
+const REQUIRED_SECTIONS = [
+  "country",
+  "hook",
+  "segue",
+  "academic",
+  "why",
+  "goal",
+];
 /* ===================== کمک‌تابع‌ها ===================== */
 const ensureDir = (p) => {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -55,6 +67,19 @@ async function getWpUserIdByEmail(email) {
   );
   return rows?.[0]?.ID || null;
 }
+async function readUserMetaMany(userId, keys = []) {
+  if (!keys.length) return {};
+  const placeholders = keys.map(() => "?").join(",");
+  const [rows] = await db.execute(
+    `SELECT meta_key, meta_value FROM ${WP_USERMETA} WHERE user_id = ? AND meta_key IN (${placeholders})`,
+    [userId, ...keys]
+  );
+  const out = {};
+  for (const r of rows || []) out[r.meta_key] = r.meta_value;
+  return out;
+}
+
+// legacy -> به ساختار selects تبدیل می‌کند
 
 async function resolveUserId(req) {
   // اگر در JWT مستقیماً ID هست
@@ -109,13 +134,128 @@ async function writeUserMeta(userId, metaKey, valueObj) {
     );
   }
 }
+function parseLegacyTarget(meta) {
+  const selects = {};
+  const lv = meta.application_level || meta.sop_filter_level || "";
+  const progId = meta.sop_filter_program_id || "";
+  const prog = meta.application_program || "";
+  const uni = meta.application_university || "";
+  const ctry = meta.application_country || meta.country || "";
+
+  if (lv) selects.sop_name_level = String(lv);
+  if (prog) selects.sop_name_program_name = String(prog);
+  if (uni) selects.sop_name_university_name = String(uni);
+  if (ctry) selects.sop_name_destination_name = String(ctry);
+
+  // متن human-readable
+  const content = [
+    selects.sop_name_level ? `- Level: ${selects.sop_name_level}` : null,
+    selects.sop_name_program_name
+      ? `- Program: ${selects.sop_name_program_name}`
+      : null,
+    selects.sop_name_university_name
+      ? `- University: ${selects.sop_name_university_name}`
+      : null,
+    selects.sop_name_destination_name
+      ? `- Country: ${selects.sop_name_destination_name}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { selects, content };
+}
+
+// برای ذخیره سازگاریِ قدیمی (اختیاری ولی مفید)
+async function writeLegacyTarget(userId, selects) {
+  const {
+    sop_name_level,
+    sop_name_program_name,
+    sop_name_university_name,
+    sop_name_destination_name,
+  } = selects || {};
+  if (sop_name_level !== undefined) {
+    await writeUserMeta(
+      userId,
+      "application_level",
+      String(sop_name_level || "")
+    );
+    await writeUserMeta(
+      userId,
+      "sop_filter_level",
+      String(sop_name_level || "")
+    );
+  }
+  if (sop_name_program_name !== undefined) {
+    await writeUserMeta(
+      userId,
+      "application_program",
+      String(sop_name_program_name || "")
+    );
+  }
+  if (sop_name_university_name !== undefined) {
+    await writeUserMeta(
+      userId,
+      "application_university",
+      String(sop_name_university_name || "")
+    );
+  }
+  if (sop_name_destination_name !== undefined) {
+    await writeUserMeta(
+      userId,
+      "application_country",
+      String(sop_name_destination_name || "")
+    );
+  }
+}
 
 // usermeta -> شکل مورد نیاز فرانت (title+content)
-function metaToSection(metaVal, title) {
+function metaToSection(metaVal, title, key = "") {
+  if (key === "country") {
+    // 1) اگر در country_sop_meta چیزی ذخیره شده بود
+    if (metaVal && typeof metaVal === "object") {
+      const sel = metaVal.selects || metaVal.inputs || {};
+      const level = sel.sop_name_level || sel.level || "";
+      const program =
+        sel.sop_name_program_name ||
+        sel.program_name ||
+        sel.sop_name_program ||
+        "";
+      const university =
+        sel.sop_name_university_name ||
+        sel.university_name ||
+        sel.sop_name_university ||
+        "";
+      const country =
+        sel.sop_name_destination_name ||
+        sel.country_name ||
+        sel.sop_name_destination ||
+        "";
+
+      const content = [
+        level ? `- Level: ${level}` : null,
+        program ? `- Program: ${program}` : null,
+        university ? `- University: ${university}` : null,
+        country ? `- Country: ${country}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return { title, content, selects: sel };
+    }
+
+    // 2) اگر خالی بود: از کلیدهای legacy بخوانیم
+    //  (نکته: چون این تابع امضای async ندارد، فالبک را در روتر انجام می‌دهیم)
+    // اینجا فقط رشته را هندل می‌کنیم
+    if (typeof metaVal === "string")
+      return { title, content: metaVal, selects: {} };
+    return { title, content: "", selects: {} };
+  }
+
+  // سایر سکشن‌ها
   if (metaVal && typeof metaVal === "object") {
     const answer = metaVal?.inputs?.answer;
     if (typeof answer === "string") return { title, content: answer };
-
     if (metaVal.inputs && typeof metaVal.inputs === "object") {
       const joined = Object.values(metaVal.inputs)
         .flat()
@@ -129,7 +269,21 @@ function metaToSection(metaVal, title) {
 }
 
 // فرانت -> ساختار سازگار با وردپرس
-function sectionToMeta(sectionObj) {
+function sectionToMeta(sectionObj, key = "") {
+  // اگر از سمت فرانت سکشن country با selects فرستاده شود، همان را ذخیره کنیم
+  if (key === "country") {
+    const selects = (sectionObj && sectionObj.selects) || {};
+    const inputs = (sectionObj && sectionObj.inputs) || {};
+    const content = (sectionObj?.content ?? "").toString();
+
+    // اگر فقط content بود، به شکل answer ذخیره می‌کنیم تا سازگار بماند
+    if (!Object.keys(selects).length && content) {
+      return { inputs: { answer: content }, selects: {} };
+    }
+    return { selects, inputs };
+  }
+
+  // سایر سکشن‌ها
   const content = (sectionObj?.content ?? "").toString();
   return { inputs: { answer: content }, selects: {} };
 }
@@ -155,6 +309,52 @@ function linesToHtml(text) {
     .map((l) => l.trim())
     .map((l) => l.replace(/</g, "&lt;").replace(/>/g, "&gt;"))
     .join("<br/>")}</body></html>`;
+}
+// HTML preview like PHP (بدون تیتر Country/Program... و بدون خط زیر عنوان‌ها)
+function assemblePreviewHtml(sectionsObj) {
+  const css = `
+  <style>
+    body{
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      line-height: 1.8;
+      font-size: 15px;
+      padding: 12px 18px;       /* فاصله از چپ/راست/بالا/پایین */
+      color: #111827;
+      text-align: justify;
+    }
+    .sec{ margin: 16px 0; }
+    .h { font-weight: 700; margin: 6px 0 8px; } /* عنوان سکشن بولد */
+    .country { margin-bottom: 18px; }
+  </style>`;
+
+  let html = `<!doctype html><meta charset="utf-8">${css}<body>`;
+
+  // 1) بلاک Country/Program/Level/University — بدون عنوان
+  if (sectionsObj.country) {
+    const s = sectionsObj.country;
+    const text = (s?.content || "").toString().trim();
+    if (text) {
+      html += `<div class="sec country">${text.replace(/\n/g, "<br/>")}</div>`;
+    }
+  }
+
+  // 2) بقیه سکشن‌ها با عنوان بولد (بدون خط زیر عنوان)
+  for (const key of SECTION_KEYS) {
+    if (key === "country") continue;
+    const s = sectionsObj[key];
+    if (!s) continue;
+    const title = (s.title || SECTION_TITLES[key]).toString().trim();
+    const text = (s.content || "").toString().trim();
+    if (!title && !text) continue;
+
+    html += `<div class="sec">
+      <div class="h">${title}</div>
+      ${text.replace(/\n/g, "<br/>")}
+    </div>`;
+  }
+
+  html += `</body>`;
+  return html;
 }
 
 // ================= Pref keys for user defaults =================
@@ -320,22 +520,107 @@ router.get("/meta", authenticateToken, async (req, res) => {
     const userId = await resolveUserId(req);
     const { section } = req.query;
 
+    // کمکی: فالبک/نرمال‌سازی سکشن Target وقتی meta ساختاریافته نیست
+    async function buildCountrySectionFromLegacy() {
+      const levelRaw = await readUserMeta(userId, "application_level");
+      const progRaw = await readUserMeta(userId, "application_program");
+      const uniRaw = await readUserMeta(userId, "application_university"); // ممکن است خالی باشد
+      const ctryRaw = await readUserMeta(userId, "application_country");
+
+      let level = String(levelRaw || "").trim();
+
+      // program: اگر ID بود، name را از جدول برنامه‌ها resolve کن
+      let program = String(progRaw || "").trim();
+      if (/^\d+$/.test(program)) {
+        try {
+          const [r] = await db.execute(
+            `SELECT name FROM ${T_PROGRAMS} WHERE ID=? LIMIT 1`,
+            [Number(program)]
+          );
+          program = r?.[0]?.name || program;
+        } catch {}
+      }
+
+      // university: اگر ID بود، name را از جدول مدارس resolve کن
+      let university = String(uniRaw || "").trim();
+      if (university && /^\d+$/.test(university)) {
+        try {
+          const [r] = await db.execute(
+            `SELECT name FROM ${T_SCHOOLS} WHERE ID=? LIMIT 1`,
+            [Number(university)]
+          );
+          university = r?.[0]?.name || university;
+        } catch {}
+      }
+
+      // country: اگر ID بود، از countryMap تبدیلش کن
+      let country = String(ctryRaw || "").trim();
+      if (/^\d+$/.test(country)) {
+        country = countryMap?.[Number(country)] || country;
+      }
+
+      const selects = {
+        sop_name_level: level,
+        sop_name_program_name: program,
+        sop_name_university_name: university,
+        sop_name_destination_name: country,
+      };
+
+      const content = [
+        level ? `- Level: ${level}` : null,
+        program ? `- Program: ${program}` : null,
+        university ? `- University: ${university}` : null,
+        country ? `- Country: ${country}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      // خروجی سازگار با بقیه‌ی مسیرها
+      return { selects, inputs: { answer: content } };
+    }
+
+    // ---------- حالت: فقط یک سکشن خواسته شده ----------
     if (section) {
       if (!SECTION_KEYS.includes(section)) {
         return res.status(400).json({ message: "Invalid section" });
       }
-      const meta = await readUserMeta(userId, toMetaKey(section));
+
+      let meta = await readUserMeta(userId, toMetaKey(section));
+
+      // فالبک برای سکشن Target اگر meta مناسب نبود
+      if (
+        section === "country" &&
+        (!meta ||
+          typeof meta !== "object" ||
+          !Object.keys(meta.selects || {}).length)
+      ) {
+        meta = await buildCountrySectionFromLegacy();
+      }
+
       return res.json({
-        sections: { [section]: metaToSection(meta, SECTION_TITLES[section]) },
+        sections: {
+          [section]: metaToSection(meta, SECTION_TITLES[section], section),
+        },
       });
     }
 
-    // همه سکشن‌ها
+    // ---------- حالت: همه سکشن‌ها ----------
     const out = {};
     for (const key of SECTION_KEYS) {
-      const meta = await readUserMeta(userId, toMetaKey(key));
-      out[key] = metaToSection(meta, SECTION_TITLES[key]);
+      let meta = await readUserMeta(userId, toMetaKey(key));
+
+      // فقط برای country اگر meta خالی/ناقص بود از legacy بساز
+      if (
+        key === "country" &&
+        (!meta ||
+          (typeof meta === "object" && !Object.keys(meta.selects || {}).length))
+      ) {
+        meta = await buildCountrySectionFromLegacy();
+      }
+
+      out[key] = metaToSection(meta, SECTION_TITLES[key], key);
     }
+
     return res.json({ sections: out });
   } catch (err) {
     console.error("GET /sop/meta error:", err);
@@ -350,11 +635,21 @@ router.get("/meta", authenticateToken, async (req, res) => {
 router.post("/meta", authenticateToken, async (req, res) => {
   try {
     const userId = await resolveUserId(req);
-
     if (req.body?.sections && typeof req.body.sections === "object") {
       for (const [key, obj] of Object.entries(req.body.sections)) {
         if (!SECTION_KEYS.includes(key)) continue;
-        const metaObj = sectionToMeta(obj);
+
+        let metaObj;
+        if (obj && (obj.selects || obj.inputs)) {
+          metaObj = {
+            selects: obj.selects || {},
+            inputs: obj.inputs || { answer: (obj.content ?? "").toString() },
+          };
+          await writeLegacyTarget(userId, metaObj.selects);
+        } else {
+          metaObj = sectionToMeta(obj, key); // ⟵ کلید را پاس بده
+        }
+
         await writeUserMeta(userId, toMetaKey(key), metaObj);
       }
       return res.json({ ok: true });
@@ -385,12 +680,21 @@ router.post("/generate", authenticateToken, async (req, res) => {
       sections = {};
       for (const key of SECTION_KEYS) {
         const meta = await readUserMeta(userId, toMetaKey(key));
-        sections[key] = metaToSection(meta, SECTION_TITLES[key]);
+        sections[key] = metaToSection(meta, SECTION_TITLES[key], key); // ⟵ key
       }
     }
-
+    const missing = REQUIRED_SECTIONS.filter((k) => {
+      const s = sections[k];
+      return !s || !(s.content || "").toString().trim();
+    });
+    if (missing.length) {
+      return res.status(400).json({
+        message: "Required sections are missing",
+        missing,
+      });
+    }
     const content = assemblePlain(sections);
-    const html = linesToHtml(content);
+    const html = assemblePreviewHtml(sections);
     res.json({
       content,
       html,
@@ -453,6 +757,17 @@ router.post("/export", authenticateToken, async (req, res) => {
       structured = tmp; // حالا ۸ سکشن استاندارد داریم
     }
 
+    const missing = REQUIRED_SECTIONS.filter((k) => {
+      const title = SECTION_TITLES[k];
+      const sec = structured.find((s) => (s.title || "").trim() === title);
+      return !sec || !(sec.content || "").toString().trim();
+    });
+    if (missing.length) {
+      return res.status(400).json({
+        message: "Required sections are missing",
+        missing,
+      });
+    }
     // --- 3) متن ساده (fallback) اگر بخش‌ها نبودند (ولی الان داریم). باز هم برای txt نیاز داریم.
     const plainFromStructured = structured
       .map((s) => `${s.title.toUpperCase()}\n${(s.content || "").trim()}\n`)
@@ -737,6 +1052,44 @@ router.delete("/documents", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("DELETE /sop/documents error:", err);
     return res.status(500).json({ message: "Failed to delete SOP document." });
+  }
+});
+// GET /api/sop/schools?search=&limit=&offset=
+router.get("/schools", authenticateToken, async (req, res) => {
+  try {
+    const search = (req.query.search || "").toString().trim();
+    let limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    let offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const params = [];
+    let where = "";
+    if (search) {
+      where = "WHERE name LIKE ?";
+      params.push(`%${search}%`);
+    }
+
+    const [rows] = await db.execute(
+      `SELECT ID AS id, name FROM ${T_SCHOOLS} ${where} ORDER BY name LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    // total (اختیاری)
+    let total = rows.length;
+    if (search) {
+      const [cnt] = await db.execute(
+        `SELECT COUNT(*) AS cnt FROM ${T_SCHOOLS} ${where}`,
+        params
+      );
+      total = Number(cnt?.[0]?.cnt || 0);
+    }
+
+    res.json({
+      items: rows.map((r) => ({ id: String(r.id), name: r.name })),
+      paging: { limit, offset, total },
+    });
+  } catch (err) {
+    console.error("GET /sop/schools error:", err);
+    res.status(500).json({ message: "Failed to fetch schools." });
   }
 });
 

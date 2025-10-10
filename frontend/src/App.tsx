@@ -16,6 +16,8 @@ import NotFound from "@/pages/NotFound";
 // Blog (اگر مسیر فایل‌هایت زیر Dashboard است همان را نگه دار)
 import Blog from "@/pages/Dashboard/Blog";
 import BlogPost from "@/pages/Dashboard/Blog/[slug]";
+import NotificationsList from "@/pages/Dashboard/Notifications";
+import NotificationDetails from "@/pages/Dashboard/Notifications/[id]";
 
 // Apply With Us
 import ApplyWithUsPlans from "@/pages/ApplyWithUs/Plans";
@@ -60,17 +62,24 @@ import HelpCenterFaqs from "@/pages/HelpCenter/Faqs";
 import HelpCenterVideos from "@/pages/HelpCenter/VideoTutorials";
 import HelpCenterTicket from "@/pages/HelpCenter/SupportTicket";
 
+// default  Darkmode
+const getInitialTheme = (): boolean => {
+  if (typeof window === "undefined") return true;
+  const stored = localStorage.getItem("theme");
+  if (stored) return stored === "dark";
+
+  return document.documentElement.classList.contains("dark") || true;
+};
+
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(() =>
-    document.documentElement.classList.contains("dark")
-  );
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(getInitialTheme);
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", isDarkMode);
+
+    try {
+      localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+    } catch {}
   }, [isDarkMode]);
 
   const toggleTheme = () => setIsDarkMode((prev) => !prev);
@@ -190,6 +199,8 @@ export default function App() {
               path="compare/programs/:programIds"
               element={<ComparePrograms />}
             />
+            <Route path="notifications" element={<NotificationsList />} />
+            <Route path="notifications/:id" element={<NotificationDetails />} />
           </Route>
 
           {/* 404 */}

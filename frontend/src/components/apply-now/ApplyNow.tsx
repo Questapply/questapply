@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../ui/button";
-import { Filter } from "lucide-react";
+import { Filter, Send } from "lucide-react";
 import LoadingSkeleton from "../loading-skeleton/LoadingSkeleton";
 import { statuses } from "./statuses";
 type StatusValue = (typeof statuses)[number]["value"];
@@ -24,6 +24,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 /* ✅ اضافه‌شده فقط برای پنل چت (منطق اصلی دست نخورده) */
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
+import ConfirmRemoveDialog from "./ConfirmRemoveDialog";
 
 /* --- انواع و توابع اصلیِ خودت بدون تغییر --- */
 type Season = "fall" | "spring" | "winter" | "summer";
@@ -381,6 +382,9 @@ const ApplyNow = () => {
   const [applicationStatusMap, setApplicationStatusMap] = useState<
     Record<number, StatusValue>
   >({});
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeTargetId, setRemoveTargetId] = useState<number | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const { toast } = useToast();
 
@@ -583,6 +587,85 @@ const ApplyNow = () => {
     setActiveApplication(applicationId);
     setApplyYourselfOpen(true);
   };
+  const askRemoveProgram = (applicationId: number) => {
+    setRemoveTargetId(applicationId);
+    setRemoveOpen(true);
+  };
+  const removeProgram = async () => {
+    if (!removeTargetId) return;
+    const id = removeTargetId;
+
+    // برای رول‌بک در صورت خطا
+    const prevProgramIds = [...programIds];
+    const prevProgramsById = { ...programsById };
+    const prevUserApps = [...userApplications];
+    const prevExpanded = [...expandedDetails];
+
+    try {
+      setRemoving(true);
+
+      const token = localStorage.getItem("token");
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+
+      // ✅ همون endpoint رسمی شما
+      const res = await fetch(`${API_URL}/program-data/program-list`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ programId: id, action: "remove" }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !Array.isArray(data?.programList)) {
+        throw new Error(
+          data?.message || `Remove failed: ${res.status} ${res.statusText}`
+        );
+      }
+
+      // ✅ UI به‌روز (براساس پاسخ سرور)
+      const newList = data.programList.map(String);
+      setProgramIds((prev) => prev.filter((x) => x !== id));
+      setProgramsById((prev) => {
+        const { [id]: _omit, ...rest } = prev;
+        return rest;
+      });
+      setUserApplications((prev) => prev.filter((p) => p.id !== id));
+      setExpandedDetails((prev) => prev.filter((x) => x !== id));
+      if (activeApplication === id) setActiveApplication(null);
+
+      // 🔔 Broadcast برای همگام‌سازی دکمه‌های بیرون (ProgramResultCard و …)
+      window.dispatchEvent(
+        new CustomEvent("program-list:update", {
+          detail: { programId: id, action: "remove", programList: newList },
+        })
+      );
+      // ذخیره در localStorage هم کمک می‌کند اگر جایی گوش نمی‌دهد:
+      localStorage.setItem("programList", JSON.stringify(newList));
+
+      toast({
+        title: "Program removed",
+        description: programsById[id]?.name || "Removed from your list.",
+      });
+    } catch (e) {
+      // رول‌بک
+      setProgramIds(prevProgramIds);
+      setProgramsById(prevProgramsById);
+      setUserApplications(prevUserApps);
+      setExpandedDetails(prevExpanded);
+
+      toast({
+        title: "Failed to remove",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setRemoving(false);
+      setRemoveOpen(false);
+      setRemoveTargetId(null);
+    }
+  };
 
   const handleSubmitWithUs = (applicationId: number) => {
     setActiveApplication(applicationId);
@@ -644,9 +727,9 @@ const ApplyNow = () => {
               transition={{ duration: 0.5, delay: 0.3 }}
               className="w-full rounded-xl border border-[#25324a] bg-gray-200 dark:bg-[#111827] overflow-hidden"
             >
-              <Table className="table-fixedmd:w-full">
+              <Table className="table-fixed md:w-full">
                 <TableHeader>
-                  <TableRow className="dark:bg-gray-900/40 bg-gray-300 ">
+                  <TableRow className="hidden md:table-row  dark:bg-gray-900/40 bg-gray-300 ">
                     <TableHead className="font-medium  md:w-1/3">
                       Program
                     </TableHead>
@@ -689,6 +772,7 @@ const ApplyNow = () => {
                         }
                         handleSubmitWithUs={handleSubmitWithUs}
                         handleStatusChange={handleStatusChange}
+                        onRemove={() => askRemoveProgram(application.id)}
                       />
                     ))
                   )}
@@ -712,6 +796,19 @@ const ApplyNow = () => {
         onOpenChange={setSubmitWithUsOpen}
         activeApplication={activeApplication}
         applications={userApplications}
+      />
+
+      <ConfirmRemoveDialog
+        open={removeOpen}
+        onOpenChange={(v) => {
+          if (!v) setRemoveTargetId(null);
+          setRemoveOpen(v);
+        }}
+        programName={
+          removeTargetId ? programsById[removeTargetId]?.name : undefined
+        }
+        onConfirm={removeProgram}
+        loading={removing}
       />
     </div>
   );

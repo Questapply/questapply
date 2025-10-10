@@ -203,7 +203,7 @@ const FilterDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className={cn("inline-block", fixedWidthClass, containerClassName)}>
+    <div className={cn("inline-block", containerClassName)}>
       <DropdownMenu open={isOpen && !disabled} onOpenChange={handleOpen}>
         <div
           className={cn(
@@ -213,7 +213,7 @@ const FilterDropdown: React.FC<Props> = ({
               : selectionCount > 0
               ? activePill
               : idlePill,
-            "w-full",
+
             pillClassName
           )}
         >
@@ -222,38 +222,39 @@ const FilterDropdown: React.FC<Props> = ({
               type="button"
               whileHover={disabled ? {} : { y: -3 }}
               className={cn(
-                "flex items-center gap-2 text-center  truncate text-inherit w-full",
+                "inline-grid grid-cols-[auto,1fr,auto] items-center",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40 rounded-full",
-                "h-7 md:h-8 !py-0 px-3",
+                "h-7 md:h-8 !py-0  gap-x-1.5",
                 buttonClassName
               )}
             >
               {icon && <span className="shrink-0">{icon}</span>}
               <span
-                className="truncate max-w-[120px] md:max-w-[160px]"
+                className="truncate text-left  min-w-0 max-w-[160px] sm:max-w-[200px] md:max-w-[240px]"
                 title={buttonLabel}
               >
                 {buttonLabel}
               </span>
-              {showCount && isMulti && selectionCount > 0 && (
-                <span
-                  className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border-2
+              <span className="shrink-0 flex items-center justify-end gap-1 min-w-[44px] sm:min-w-[56px]">
+                {showCount && isMulti && selectionCount > 0 && (
+                  <span
+                    className=" inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border-2
                  bg-sky-200 text-sky-900 border-sky-200
                  dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/40"
-                >
-                  {selectionCount}
-                </span>
-              )}
-              <ChevronsUpDown className="h-3.5 w-3.5 ml-1 shrink-0" />
+                  >
+                    {selectionCount}
+                  </span>
+                )}
+                <ChevronsUpDown className="h-3.5 w-3.5 ml-1 shrink-0" />
+                {selectionCount > 0 && (
+                  <X
+                    className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300 cursor-pointer shrink-0"
+                    onClick={clearSelection}
+                  />
+                )}
+              </span>
             </motion.button>
           </DropdownMenuTrigger>
-
-          {selectionCount > 0 && (
-            <X
-              className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300 cursor-pointer shrink-0"
-              onClick={clearSelection}
-            />
-          )}
         </div>
 
         <DropdownMenuContent

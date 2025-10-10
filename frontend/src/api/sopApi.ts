@@ -86,10 +86,23 @@ export async function getSopMeta(sopId?: string | number): Promise<{
   country?: string | null;
 }> {
   const url = new URL(`${SOP_BASE}/meta`);
-  if (sopId != null) url.searchParams.set("sopId", String(sopId)); // ignored by server, kept for compatibility
+  if (sopId != null) url.searchParams.set("sopId", String(sopId));
+
+  console.log("[SOP API] GET", url.toString());
+
   const res = await fetch(url.toString(), { headers: authHeaders() });
-  if (!res.ok) throw new Error(`GET /sop/meta → ${res.status}`);
-  return res.json();
+  console.log("[SOP API] /meta status:", res.status);
+
+  if (!res.ok) {
+    // ⬅️ اینجا نام متغیر را درست تعریف می‌کنیم
+    const errorBody = await res.text().catch(() => "");
+    console.log("[SOP API] /meta error body:", errorBody);
+    throw new Error(`GET /sop/meta → ${res.status}`);
+  }
+
+  const json = await res.json();
+  console.log("[SOP API] /meta payload:", JSON.parse(JSON.stringify(json)));
+  return json;
 }
 
 // POST /api/sop/meta  → ذخیره چند سکشن
@@ -355,5 +368,26 @@ export async function deleteSopDocument(
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function getSchools(params?: {
+  search?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  items: Array<{ id: string; name: string }>;
+  paging: { limit: number; offset: number; total: number };
+}> {
+  const q = new URLSearchParams();
+  if (params?.search) q.set("search", params.search);
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  const res = await fetch(
+    `${SOP_BASE}/schools${q.toString() ? `?${q.toString()}` : ""}`,
+    {
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) throw new Error(`GET /sop/schools → ${res.status}`);
   return res.json();
 }

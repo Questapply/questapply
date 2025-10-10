@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useLayoutEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Download,
@@ -158,29 +158,22 @@ const Hero3 = ({ isDarkMode }: { isDarkMode: boolean }) => {
   );
 
   // --- useEffect hooks ---
+  const scrollToBottom = () => {
+    const viewport = scrollAreaRef_radix.current?.querySelector(
+      "[data-radix-scroll-area-viewport]"
+    ) as HTMLDivElement | null;
+    if (viewport) {
+      // rAF تا بعد از commit DOM
+      requestAnimationFrame(() => {
+        viewport.scrollTop = viewport.scrollHeight;
+      });
+    }
+  };
 
   // Auto-scroll to bottom of chat when messages change
-  useEffect(() => {
-    const performScroll = () => {
-      if (scrollAreaRef_radix.current) {
-        const viewport = scrollAreaRef_radix.current.querySelector(
-          "[data-radix-scroll-area-viewport]"
-        );
-
-        if (viewport) {
-          viewport.scrollTop = viewport.scrollHeight;
-        } else {
-          console.log("Viewport not found within ScrollAreaRef.current");
-        }
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      requestAnimationFrame(performScroll);
-    } else {
-      setTimeout(performScroll, 0);
-    }
-  }, [chatMessages, currentScenario]);
+  useLayoutEffect(() => {
+    scrollToBottom();
+  }, [chatMessages, currentScenario, isAutoTyping, currentCharIndex, isTyping]);
 
   // Auto-typing simulation for Hero 3 (Trigger for scenarios)
   useEffect(() => {
@@ -194,7 +187,12 @@ const Hero3 = ({ isDarkMode }: { isDarkMode: boolean }) => {
 
         return () => clearTimeout(startTyping);
       } else if (currentScenario === scenarioMessages.length) {
-        const scrollY = window.scrollY;
+        // اسکرول داخلی ScrollArea را ذخیره کن (نه window)
+        const viewport = scrollAreaRef_radix.current?.querySelector(
+          "[data-radix-scroll-area-viewport]"
+        ) as HTMLDivElement | null;
+        const prevScrollTop = viewport?.scrollTop ?? 0;
+
         const resetTimer = setTimeout(() => {
           setChatMessages([
             {
@@ -204,8 +202,10 @@ const Hero3 = ({ isDarkMode }: { isDarkMode: boolean }) => {
             },
           ]);
           setCurrentScenario(0);
+
+          // فقط اسکرول داخل ScrollArea خودت را برگردان
           requestAnimationFrame(() => {
-            window.scrollTo(0, scrollY);
+            if (viewport) viewport.scrollTop = prevScrollTop;
           });
         }, 8000);
 

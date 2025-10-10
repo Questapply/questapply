@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "../ui/button";
 import { Globe, ArrowRight } from "lucide-react";
@@ -138,6 +138,7 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
     level: false,
     field: false,
   });
+  const fieldSearchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof data.country === "object" && data.country?.id) {
@@ -349,7 +350,15 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
           {/* Field + Search داخل Select */}
           <div className="space-y-2">
             <Label htmlFor="field">What field do you want to study?</Label>
-            <Select value={fieldId} onValueChange={setFieldId}>
+            <Select
+              value={fieldId}
+              onValueChange={setFieldId}
+              onOpenChange={(open) => {
+                if (open) {
+                  setTimeout(() => fieldSearchRef.current?.focus(), 0);
+                }
+              }}
+            >
               <SelectTrigger
                 id="field"
                 className={`w-full ${
@@ -364,19 +373,21 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
                 sideOffset={6}
                 align="start"
                 avoidCollisions={false}
-                className=" overflow-hidden p-0"
+                className="  p-0"
               >
                 {/* 🔎 نوار جستجو */}
-                <div className="max-h-96 overflow-y-auto">
-                  <div className="p-2 sticky z-10 top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700">
-                    <Input
-                      placeholder="Search field..."
-                      value={fieldSearch}
-                      onChange={(e) => setFieldSearch(e.target.value)}
-                    />
-                  </div>
+
+                <div className="p-2 sticky z-10 top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700">
+                  <Input
+                    ref={fieldSearchRef}
+                    placeholder="Search field..."
+                    value={fieldSearch}
+                    onChange={(e) => setFieldSearch(e.target.value)}
+                  />
                 </div>
+
                 {/* لیست فیلدها (فیلتر شده) */}
+
                 {filteredFields.length > 0 ? (
                   filteredFields.map((field, index) => (
                     <SelectItem

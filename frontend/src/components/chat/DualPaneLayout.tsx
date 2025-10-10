@@ -102,20 +102,22 @@ const DualPaneLayout = ({
           <div
             className={cn(
               "flex flex-col md:flex-row h-full  bg-muted/30",
-              boxGap === "4" && "gap-x-4",
-              boxGap === "6" && "gap-x-6",
-              boxGap === "8" && "gap-x-8",
-              boxGap === "10" && "gap-x-10"
+              boxGap === "4" && "md:gap-x-4",
+              boxGap === "6" && "md:gap-x-6",
+              boxGap === "8" && "md:gap-x-8",
+              boxGap === "10" && "md:gap-x-10",
+              "gap-y-4"
             )}
           >
             {/* Chat Box */}
             <motion.div
               className={cn(
-                "flex flex-col rounded-lg border shadow-sm bg-card border-border min-h-0 min-w-0",
-                stickyChat ? "md:sticky" : ""
+                "flex flex-col rounded-lg border shadow-sm bg-card border-border min-h-0 min-w-0 w-full ",
+                stickyChat ? "md:sticky" : "",
+                "basis-full md:basis-[var(--chat-basis)] md:max-w-[var(--chat-basis)]"
               )}
               style={{
-                width: `${chatRatio * 100}%`,
+                ["--chat-basis" as any]: `${chatRatio * 100}%`,
                 height: getChatHeight(),
                 ...(stickyChat ? { top: `${stickyOffset}px` } : {}),
               }}
@@ -128,7 +130,7 @@ const DualPaneLayout = ({
 
             {/* Results Box */}
             <motion.div
-              className="flex-1 rounded-lg border shadow-sm overflow-hidden bg-card border-border min-h-0 min-w-0"
+              className="w-full flex-1 rounded-lg border  shadow-sm overflow-hidden bg-card border-border min-h-0 min-w-0"
               initial={{ x: 50, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.1 }}

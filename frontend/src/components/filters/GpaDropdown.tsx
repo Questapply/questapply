@@ -76,7 +76,7 @@ const GpaDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className={cn("inline-block align-top", fixedWidthClass)}>
+    <div className={cn("inline-block align-top")}>
       <DropdownMenu open={open && !disabled} onOpenChange={setOpen}>
         <div
           className={cn(

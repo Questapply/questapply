@@ -53,7 +53,8 @@ interface Section {
 type SectionsMap = Record<SectionKey, Section>;
 type Props = {
   onSaved?: () => void;
-  // ... سایر پراپ‌ها
+  initialCreateNew?: boolean;
+  initialRoute?: "recommender" | "builder";
 };
 
 interface Snapshot {
@@ -120,14 +121,24 @@ const initialSections: SectionsMap = {
 };
 
 /* =============== Component =============== */
-const MyLORs: React.FC<Props> = ({ onSaved }) => {
+const MyLORs: React.FC<Props> = ({
+  onSaved,
+  initialCreateNew,
+  initialRoute,
+}) => {
   // flow
   const [showMethodModal, setShowMethodModal] = useState(false);
   const [recommendationMethod, setRecommendationMethod] = useState<
     "self" | "other" | null
   >(null);
-  const [showRecommenderForm, setShowRecommenderForm] = useState(false);
-  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [showRecommenderForm, setShowRecommenderForm] = useState(
+    initialRoute === "recommender"
+  );
+  const [isCreatingNew, setIsCreatingNew] = useState(
+    !!initialCreateNew ||
+      initialRoute === "builder" ||
+      initialRoute === "recommender"
+  );
 
   // sections
   const [sections, setSections] = useState<SectionsMap>({ ...initialSections });
