@@ -94,6 +94,7 @@ app.use(
   "/api/program-data",
   (req, res, next) => {
     // Public paths that don't require authentication
+    if (req.method === "OPTIONS") return res.sendStatus(204);
     if (
       req.path === "/program-categories" ||
       req.path.startsWith("/program/")

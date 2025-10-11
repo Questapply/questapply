@@ -5,8 +5,17 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secure-jwt-secret";
 // Middleware for token verification
+const PUBLIC_PATHS = new Set([
+  "/health",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/forgot",
+]);
+
 export const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (PUBLIC_PATHS.has(req.path)) return next();
+  const authHeader = req.headers["authorization"] || "";
   const token = authHeader?.split(" ")[1];
 
   if (!token) {
