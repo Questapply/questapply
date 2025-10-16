@@ -1,4 +1,4 @@
-// FindSchools.tsx
+// FindSchools.tsx  — updated for: single/multi rules, clear-all, no "None"
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -27,8 +27,9 @@ import { orderBySchoolOptions, filterIcons } from "../filters/FilterData";
 import { useChatController } from "../chat/useChatController";
 import { mergeFilterPatch } from "../chat/mergeFilters";
 import type { FilterSnapshot, FilterPatch } from "../chat/actions";
+import { Skeleton } from "../ui/skeleton";
 
-// 👇 اضافه‌شده برای چت
+// 👇 چت
 import DualPaneLayout from "../chat/DualPaneLayout";
 import ChatHistory, { ChatMessage } from "../chat/ChatHistory";
 import ChatComposer from "../chat/ChatComposer";
@@ -36,14 +37,18 @@ import ResultsColumn from "../chat/ResultsColumn";
 import type { SessionMeta } from "../chat/storage";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+// ------------------------------------------------------------------
+// 1) تغییر نوع State: فقط state و school چندانتخابی هستند.
+//    سایر فیلدها تک‌انتخابی شدند.
+// ------------------------------------------------------------------
 type FiltersState = {
   country?: string;
-  state?: string[]; //
-  school?: string;
-  degreeLevel?: string;
-  areaOfStudy?: string[];
-  program?: string[];
-  orderBy?: string;
+  state?: string[]; // multi ✅
+  school?: string[]; // ← قبلاً string بود؛ حالا multi ✅
+  degreeLevel?: string; // single
+  areaOfStudy?: string; // ← قبلاً string[]؛ حالا single ✅
+  program?: string; // ← قبلاً string[]؛ حالا single ✅
+  orderBy?: string; // single
 };
 
 // Helpers
@@ -105,11 +110,11 @@ const mapFiltersToApiParams = (
   });
 
   if (!out.orderBy) out.orderBy = "qs_rank";
-
   return out;
 };
+
 const PAGE_ID = "find-schools";
-const FILTER_WIDTH = "w-[150px] sm:w-[180px] md:w-[260px]";
+const FILTER_WIDTH = "w-[150px] sm:w-[160px] md:w-[180px]";
 const FILTER_BTN = "truncate";
 
 const FindSchools = () => {
@@ -145,25 +150,20 @@ const FindSchools = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // ---------------------- چت: state و هندلرها (مینیمال و مستقل از نتایج) ----------------------
+  // ---------------------- چت: بدون تغییر در منطق ----------------------
   const [sessionId, setSessionId] = useState<string>(() => makeSessionId());
   const [sessions, setSessions] = useState(() => listSessionsLocal(PAGE_ID));
   const [loadingSession, setLoadingSession] = useState(false);
-
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  const handleResultClick = useCallback((_resultData: any) => {
-    // اینجا کاری انجام نمی‌دیم تا به نتایج دست نزنیم
-  }, []);
+  const handleResultClick = useCallback((_resultData: any) => {}, []);
 
-  //handeler for chat
-  // هر بار لیست سشن‌ها تغییر کرد (مثلاً با New chat)، رفرش کن
   const refreshSessions = useCallback(() => {
     setSessions(listSessionsLocal(PAGE_ID));
   }, []);
   const getUserProfile = useCallback((): UserProfile | null => {
     try {
-      const raw = localStorage.getItem("user"); // اگر کلیدت چیز دیگه‌ایه همونو بذار
+      const raw = localStorage.getItem("user");
       if (!raw) return null;
       const user = JSON.parse(raw);
       return {
@@ -177,6 +177,7 @@ const FindSchools = () => {
     }
   }, []);
 
+  // snapshot جدید با نوع‌های جدید
   const getFilterSnapshot = (): FilterSnapshot => ({
     country: selectedFilters.country,
     state: selectedFilters.state,
@@ -188,17 +189,15 @@ const FindSchools = () => {
   });
 
   const applyFilterPatchAndFetch = async (patch: FilterPatch) => {
-    const current = getFilterSnapshot();
     const next = mergeFilterPatch(getFilterSnapshot(), patch);
-
     setSelectedFilters((prev) => ({
       ...prev,
       country: next.country,
-      state: next.state,
-      school: next.school,
+      state: next.state as string[] | undefined,
+      school: next.school as string[] | undefined,
       degreeLevel: next.degreeLevel,
-      areaOfStudy: next.areaOfStudy,
-      program: next.program,
+      areaOfStudy: next.areaOfStudy as string | undefined,
+      program: next.program as string | undefined,
       orderBy: next.orderBy,
     }));
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -219,11 +218,11 @@ const FindSchools = () => {
     threadKey: `${PAGE_ID}:${sessionId}`,
     getFilterSnapshot,
     applyFilterPatchAndFetch,
-
     onToast: ({ title, description, variant }) =>
       toast({ title, description, variant: (variant as any) || "default" }),
     getUserProfile,
   });
+
   function previewTitle(text: string, max = 40) {
     const clean = (text || "").replace(/\s+/g, " ").trim();
     return clean.length > max
@@ -231,22 +230,18 @@ const FindSchools = () => {
       : clean || "Untitled chat";
   }
 
-  // New chat
   const handleNewChat = () => {
     if (chatMessages.length > 0) {
       finalizeSessionLocal(PAGE_ID, sessionId, chatMessages.length);
     }
-    setSessionId(makeSessionId()); // سشن جدید اما بدون meta
-    setSessions(listSessionsLocal(PAGE_ID)); // رفرش لیست
-    // (هوک useChatController با threadKey جدید، چت خالی را هیدرات می‌کند)
+    setSessionId(makeSessionId());
+    setSessions(listSessionsLocal(PAGE_ID));
   };
 
-  // انتخاب سشن از Dropdown
   const handleSelectSession = (id: string) => {
     if (id === sessionId) return;
     setLoadingSession(true);
     setSessionId(id);
-    // یه وقفه کوتاه برای نمایش اسکلتینگ اگر هیدرات طول کشید
     setTimeout(() => setLoadingSession(false), 300);
   };
 
@@ -254,7 +249,6 @@ const FindSchools = () => {
     const userMsgs = chatMessages.filter((m) => m.type === "user");
     if (userMsgs.length === 1) {
       const now = Date.now();
-      // اگر meta وجود نداشت، همین‌جا بساز
       upsertSessionMetaLocal(PAGE_ID, {
         id: sessionId,
         title: previewTitle(userMsgs[0].content),
@@ -262,9 +256,8 @@ const FindSchools = () => {
         updatedAt: now,
         messageCount: chatMessages.length,
       });
-      setSessions(listSessionsLocal(PAGE_ID)); // رفرش Dropdown
+      setSessions(listSessionsLocal(PAGE_ID));
     } else if (userMsgs.length > 1) {
-      // پیام‌های بعدی: فقط updatedAt / messageCount را به‌روز کن
       upsertSessionMetaLocal(PAGE_ID, {
         id: sessionId,
         title:
@@ -280,7 +273,6 @@ const FindSchools = () => {
     }
   }, [chatMessages, sessionId]);
 
-  // نام سشن را بعد از اولین پیام کاربر ست کن (اگر هنوز New chat است)
   useEffect(() => {
     const userMsgs = chatMessages.filter((m) => m.type === "user");
     if (userMsgs.length === 1) {
@@ -290,7 +282,6 @@ const FindSchools = () => {
     }
   }, [chatMessages, sessionId, refreshSessions]);
 
-  // خروج از برنامه/صفحه → سشن را فاینالایز کن
   useEffect(() => {
     const onBye = () => {
       if (chatMessages.length > 0) {
@@ -304,9 +295,7 @@ const FindSchools = () => {
     };
   }, [sessionId, chatMessages.length]);
 
-  // ---------------------------------------------------------------------------------------------
-
-  // userPreferences  availableCountries, availableAreasOfStudy,
+  // ------------------ گزینه‌ها ------------------
   const allCountryOptions = useMemo<FilterOption[]>(() => {
     return (userPreferences?.availableCountries || []).map((country) => ({
       value: String(country.id),
@@ -323,10 +312,7 @@ const FindSchools = () => {
 
   const mappedDegreeLevelOptions = useMemo<FilterOption[]>(() => {
     const options = ["Bachelor", "Master", "PhD"];
-    return options.map((option) => ({
-      value: option,
-      label: option,
-    }));
+    return options.map((option) => ({ value: option, label: option }));
   }, []);
 
   const mappedOrderBySchoolOptions = useMemo<FilterOption[]>(() => {
@@ -359,45 +345,47 @@ const FindSchools = () => {
     () => getLabelByValue(allCountryOptions, selectedFilters.country),
     [allCountryOptions, selectedFilters.country]
   );
-  const selectedSchoolLabel = useMemo(
-    () => getLabelByValue(availableSchoolsForDropdown, selectedFilters.school),
-    [availableSchoolsForDropdown, selectedFilters.school]
-  );
+
+  // School چندانتخابی → نمایش لیبل اول صرفاً برای دکمه
+  const selectedSchoolLabel = useMemo(() => {
+    const labels = getLabelsByValues(
+      availableSchoolsForDropdown,
+      selectedFilters.school
+    );
+    return labels[0] || "";
+  }, [availableSchoolsForDropdown, selectedFilters.school]);
+
   const selectedDegreeLevelLabel = useMemo(
     () =>
       getLabelByValue(mappedDegreeLevelOptions, selectedFilters.degreeLevel),
     [mappedDegreeLevelOptions, selectedFilters.degreeLevel]
   );
+
   const selectedOrderByLabel = useMemo(
     () => getLabelByValue(mappedOrderBySchoolOptions, selectedFilters.orderBy),
     [mappedOrderBySchoolOptions, selectedFilters.orderBy]
   );
+
+  const selectedAreaOfStudyLabel = useMemo(
+    () => getLabelByValue(allAreaOfStudyOptions, selectedFilters.areaOfStudy),
+    [allAreaOfStudyOptions, selectedFilters.areaOfStudy]
+  );
+
+  const selectedProgramLabel = useMemo(
+    () => getLabelByValue(availablePrograms, selectedFilters.program),
+    [availablePrograms, selectedFilters.program]
+  );
+
   const onCountrySelect = useCallback((id: string) => {
     setSelectedFilters((prev) => ({
       ...prev,
-      country: String(id),
+      country: String(id || ""),
       state: [],
-      school: undefined,
+      school: [],
     }));
   }, []);
 
-  const selectedAreaOfStudyLabel = useMemo(() => {
-    const labels = getLabelsByValues(
-      allAreaOfStudyOptions,
-      selectedFilters.areaOfStudy
-    );
-    return labels[0] || "";
-  }, [allAreaOfStudyOptions, selectedFilters.areaOfStudy]);
-
-  const selectedProgramLabel = useMemo(() => {
-    const labels = getLabelsByValues(
-      availablePrograms,
-      selectedFilters.program
-    );
-    return labels[0] || "";
-  }, [availablePrograms, selectedFilters.program]);
-
-  // --------- API helpers (State / Program) ---------
+  // --------- API helpers ---------
   const fetchStates = useCallback(async (countryId: string) => {
     setAvailableStates([]);
     if (!countryId) {
@@ -420,7 +408,6 @@ const FindSchools = () => {
         return;
       }
       const data = await res.json();
-
       const states = (data.states || []).map((s: any) => ({
         value: String(s.id),
         label: s.name,
@@ -433,18 +420,17 @@ const FindSchools = () => {
     }
   }, []);
 
-  // Area → Program
   const fetchProgramsByAreasAndLevel = useCallback(
-    async (areaIds: string[], degreeLevel: string) => {
+    async (areaIdList: string[], degreeLevel: string) => {
       setAvailablePrograms([]);
-      if (!areaIds?.length || !degreeLevel) {
+      if (!areaIdList?.length || !degreeLevel) {
         setLoadingPrograms(false);
         return;
       }
       setLoadingPrograms(true);
       try {
         const token = localStorage.getItem("token");
-        const requests = areaIds.map((id) =>
+        const requests = areaIdList.map((id) =>
           fetch(
             `${API_URL}/program-data/by-area?areaOfStudy=${id}&degreeLevel=${encodeURIComponent(
               degreeLevel
@@ -489,6 +475,8 @@ const FindSchools = () => {
       try {
         const token = localStorage.getItem("token");
         const params = new URLSearchParams();
+        params.append("orderBy", "name_a_to_z");
+        params.append("ignoreUserDefaults", "1");
         params.append("limit", "200");
         if (countryId) params.append("country", String(countryId));
         if (stateId) params.append("state", String(stateId));
@@ -528,7 +516,6 @@ const FindSchools = () => {
     ) => {
       try {
         const token = localStorage.getItem("token");
-
         if (!token) {
           navigate("/auth?mode=login");
           return;
@@ -544,7 +531,6 @@ const FindSchools = () => {
         queryParams.append("limit", "10");
 
         const apiFilters = mapFiltersToApiParams(filters);
-
         Object.entries(apiFilters).forEach(([key, value]) => {
           if (value) queryParams.append(key, value);
         });
@@ -580,7 +566,6 @@ const FindSchools = () => {
         }
 
         const data = await response.json();
-        console.log("School Data:", data);
         const newSchools = data.schools || [];
         setSchools((prev) =>
           isLoadMore ? [...prev, ...newSchools] : newSchools
@@ -588,16 +573,16 @@ const FindSchools = () => {
         setHasMore(data.hasMore === true);
         setNoSchoolsFound(newSchools.length === 0 && pageNum === 1);
 
-        // userPreferences default
         if (isInitialMount.current && data.userPreferences) {
           const effective = { ...data.userPreferences };
           if (selectedFilters.country) {
-            effective.country = String(selectedFilters.country); // 👈 برای UI
+            effective.country = String(selectedFilters.country);
           }
           setUserPreferences(effective);
           isInitialMount.current = false;
-          const initial: FiltersState = { orderBy: "qs_rank" };
 
+          // پیش‌فرض‌ها
+          const initial: FiltersState = { orderBy: "qs_rank" };
           if (data.userPreferences.country) {
             initial.country = String(data.userPreferences.country);
           }
@@ -608,21 +593,21 @@ const FindSchools = () => {
                 : data.userPreferences.level;
           }
           if (data.userPreferences.areaOfStudy?.id) {
-            initial.areaOfStudy = [String(data.userPreferences.areaOfStudy.id)];
+            initial.areaOfStudy = String(data.userPreferences.areaOfStudy.id); // single ✅
           }
           if (data.userPreferences.program) {
-            initial.program = [String(data.userPreferences.program)];
+            initial.program = String(data.userPreferences.program); // single ✅
           }
 
           setSelectedFilters((prev) => ({ ...prev, ...initial }));
 
           if (initial.country) {
             fetchStates(initial.country);
-            await fetchSchoolsForDropdown(initial.country, initial.state?.[0]);
+            await fetchSchoolsForDropdown(initial.country, undefined);
           }
-          if (initial.areaOfStudy?.length && initial.degreeLevel) {
+          if (initial.areaOfStudy && initial.degreeLevel) {
             await fetchProgramsByAreasAndLevel(
-              initial.areaOfStudy,
+              [initial.areaOfStudy],
               initial.degreeLevel
             );
           }
@@ -664,7 +649,7 @@ const FindSchools = () => {
   useEffect(() => {
     if (selectedFilters.country) {
       fetchStates(selectedFilters.country);
-      //School dropdown
+      // School dropdown: اگر state چندتاست، بر اساس اولین state لود می‌کنیم (مثل قبل)
       fetchSchoolsForDropdown(
         selectedFilters.country,
         selectedFilters.state?.[0]
@@ -672,14 +657,13 @@ const FindSchools = () => {
     } else {
       setAvailableStates([]);
       setAvailableSchoolsForDropdown?.([]);
-      setSelectedFilters((prev) => ({ ...prev, state: [], school: undefined }));
+      setSelectedFilters((prev) => ({ ...prev, state: [], school: [] }));
     }
   }, [selectedFilters.country]);
 
+  // AreaOfStudy (single) + DegreeLevel (single) → Program options
   useEffect(() => {
-    const area = Array.isArray(selectedFilters.areaOfStudy)
-      ? selectedFilters.areaOfStudy
-      : selectedFilters.areaOfStudy
+    const area = selectedFilters.areaOfStudy
       ? [selectedFilters.areaOfStudy]
       : [];
     const level = selectedFilters.degreeLevel;
@@ -687,11 +671,7 @@ const FindSchools = () => {
       fetchProgramsByAreasAndLevel(area, level);
     } else {
       setAvailablePrograms([]);
-      setSelectedFilters((prev) => {
-        const next = { ...prev };
-        delete next.program;
-        return next;
-      });
+      setSelectedFilters((prev) => ({ ...prev, program: undefined }));
     }
   }, [selectedFilters.areaOfStudy, selectedFilters.degreeLevel]);
 
@@ -703,15 +683,16 @@ const FindSchools = () => {
         if (value) (next as any)[filterName] = value;
         else delete (next as any)[filterName];
 
+        // پاکسازی آبشاری مثل قبل
         if (filterName === "areaOfStudy" || filterName === "degreeLevel") {
-          next.program = [];
+          next.program = undefined; // single
         }
         if (filterName === "country") {
           next.state = [];
-          next.school = undefined;
+          next.school = [];
         }
         if (filterName === "state") {
-          next.school = undefined;
+          next.school = [];
         }
         return next;
       });
@@ -719,11 +700,14 @@ const FindSchools = () => {
     []
   );
 
+  // فقط برای state و school چندانتخابی
   const handleMultiFilterChange = useCallback(
-    (filterName: "state" | "areaOfStudy" | "program", values: string[]) => {
+    (filterName: "state" | "school", values: string[]) => {
       setSelectedFilters((prev) => {
         const next: FiltersState = { ...prev, [filterName]: values };
-        if (filterName === "areaOfStudy") next.program = [];
+        if (filterName === "state") {
+          next.school = []; // تغییر state ⇒ school ریست شود
+        }
         return next;
       });
     },
@@ -792,16 +776,14 @@ const FindSchools = () => {
     },
     [favorites, toast]
   );
+
   const handleCompare = useCallback(
     (schoolId: number, checked: boolean) => {
       setSchoolsToCompare((prev) => {
         const set = new Set(prev);
         if (checked) set.add(schoolId);
         else set.delete(schoolId);
-
         const arr = Array.from(set);
-
-        // پیام‌های راهنما
         if (checked && arr.length === 1) {
           toast({
             title: "1 school selected",
@@ -819,12 +801,12 @@ const FindSchools = () => {
     [toast]
   );
 
+  // شرط فعال بودن دکمه Filter با نوع‌های جدید
   const isApplyEnabled = useMemo(() => {
     return Boolean(
       selectedFilters.country &&
         selectedFilters.degreeLevel &&
-        Array.isArray(selectedFilters.areaOfStudy) &&
-        selectedFilters.areaOfStudy.length > 0
+        selectedFilters.areaOfStudy // single
     );
   }, [
     selectedFilters.country,
@@ -840,14 +822,8 @@ const FindSchools = () => {
         currentSessionId={sessionId}
         onNewChat={handleNewChat}
         onSelectSession={handleSelectSession}
-        onViewOlder={async () => {
-          // TODO: از سرور (Redis) بیار، به sessions اضافه کن و refresh کن
-          // const older = await fetchOlderSessionsFromServer(PAGE_ID, sessions.length, 20);
-          // merge و setSessions(...)
-        }}
+        onViewOlder={async () => {}}
       />
-
-      {/* Chat History */}
       <div className="flex-1 overflow-hidden">
         <ChatHistory
           messages={chatMessages}
@@ -869,8 +845,6 @@ const FindSchools = () => {
           </Button>
         </div>
       )}
-
-      {/* Chat Composer */}
       <div className="flex-shrink-0">
         <ChatComposer
           onSendMessage={sendMessage}
@@ -880,7 +854,6 @@ const FindSchools = () => {
       </div>
     </>
   );
-  // ---------------------------------------------------------
 
   // --------- UI ---------
   return (
@@ -939,8 +912,9 @@ const FindSchools = () => {
           </svg>
           <h2 className="text-lg font-semibold">Filters</h2>
         </div>
+
         <div className="flex flex-wrap items-center gap-2 md:gap-4">
-          {/* Country (single) */}
+          {/* Country — single */}
           <FilterDropdown
             label="Country"
             icon={<span>{filterIcons.country}</span>}
@@ -951,15 +925,16 @@ const FindSchools = () => {
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount={false}
+            showNone={false} // ← حذف "None"
           />
 
-          {/* State (multi) — بonSelect (toggle) */}
+          {/* State — multi */}
           <FilterDropdown
             label="State"
             icon={<span>{filterIcons.state}</span>}
             options={availableStates}
             multiple
-            showCount
             selectedValues={selectedFilters.state || []}
             onChange={(vals) =>
               handleMultiFilterChange("state", vals as string[])
@@ -972,16 +947,20 @@ const FindSchools = () => {
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount
+            showNone={false}
           />
 
-          {/* School (single) */}
+          {/* School — multi (جدید) */}
           <FilterDropdown
             label="School"
             icon={<span>{filterIcons.schools}</span>}
             options={availableSchoolsForDropdown}
-            onSelect={(value) => handleFilterChange("school", value)}
-            selectedValue={selectedFilters.school || ""}
-            selectedLabel={selectedSchoolLabel}
+            multiple
+            selectedValues={selectedFilters.school || []}
+            onChange={(vals) =>
+              handleMultiFilterChange("school", vals as string[])
+            }
             disabled={
               loadingSchoolsForDropdown ||
               !selectedFilters.country ||
@@ -990,9 +969,11 @@ const FindSchools = () => {
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount
+            showNone={false}
           />
 
-          {/* Degree Level (single) */}
+          {/* Degree Level — single */}
           <FilterDropdown
             label="Degree Level"
             icon={<span>{filterIcons.degreeLevel}</span>}
@@ -1003,50 +984,47 @@ const FindSchools = () => {
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount={false}
+            showNone={false}
           />
 
-          {/* Area of Study (multi) — userPreferences */}
+          {/* Area of Study — single (قبلاً multi بود) */}
           <FilterDropdown
             label="Area of Study"
             icon={<span>{filterIcons.areaOfStudy}</span>}
             options={allAreaOfStudyOptions}
-            multiple
-            showCount
-            selectedValues={selectedFilters.areaOfStudy || []}
-            onChange={(vals) =>
-              handleMultiFilterChange("areaOfStudy", vals as string[])
-            }
+            onSelect={(value) => handleFilterChange("areaOfStudy", value)}
+            selectedValue={selectedFilters.areaOfStudy || ""}
+            selectedLabel={selectedAreaOfStudyLabel}
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount={false}
+            showNone={false}
           />
 
-          {/* Program (multi) — userPreferences */}
+          {/* Program — single (قبلاً multi بود) */}
           <FilterDropdown
             label="Program"
             icon={<span>{filterIcons.programs}</span>}
             options={availablePrograms}
-            multiple
-            showCount
-            selectedValues={selectedFilters.program || []}
-            onChange={(vals) =>
-              handleMultiFilterChange("program", vals as string[])
-            }
+            onSelect={(value) => handleFilterChange("program", value)}
+            selectedValue={selectedFilters.program || ""}
+            selectedLabel={selectedProgramLabel}
             disabled={
               loadingPrograms ||
-              !(
-                selectedFilters.areaOfStudy &&
-                selectedFilters.areaOfStudy.length > 0
-              ) ||
+              !selectedFilters.areaOfStudy ||
               !selectedFilters.degreeLevel ||
               availablePrograms.length === 0
             }
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount={false}
+            showNone={false}
           />
 
-          {/* Order By (single) */}
+          {/* Order By — single */}
           <FilterDropdown
             label="Order By"
             icon={<span>{filterIcons.orderBy}</span>}
@@ -1057,6 +1035,8 @@ const FindSchools = () => {
             fixedWidthClass={FILTER_WIDTH}
             buttonClassName={FILTER_BTN}
             maxLabelChars={20}
+            showCount={false}
+            showNone={false}
           />
 
           {/* Apply */}
@@ -1077,59 +1057,86 @@ const FindSchools = () => {
         </div>
       </div>
 
-      {/* Dual Pane*/}
+      {/* Dual Pane */}
       <DualPaneLayout
         chat={chatComponent}
         results={[
-          <ResultsColumn
-            key="results-main"
-            // title="Results"
-            padded={false}
-            className="p-0"
-          >
+          <ResultsColumn key="results-main" padded={false} className="p-0">
+            {/* Loading skeleton مثل find-programs */}
             {loading ? (
-              // فقط اسکلت لودینگ (کامپوننت خودت)
-              <LoadingSkeleton />
-            ) : schools.length > 0 ? (
               <div className="space-y-6">
-                {schools.map((school, index) => (
-                  <SchoolCard
-                    key={school.id}
-                    school={school}
-                    index={index}
-                    isFavorite={!!favorites[school.id]}
-                    toggleFavorite={toggleFavorite}
-                    onCompare={handleCompare}
-                    isInCompareList={schoolsToCompare.includes(school.id)}
-                  />
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="p-6 border rounded-lg bg-white dark:bg-gray-900 flex gap-6"
+                  >
+                    <div className="w-20 h-20 rounded-lg bg-gray-200 dark:bg-gray-700" />
+                    <div className="flex-1 space-y-3">
+                      <Skeleton className="h-5 w-1/3 rounded" />
+                      <Skeleton className="h-4 w-1/2 rounded" />
+                      <Skeleton className="h-4 w-1/4 rounded" />
+                      <Skeleton className="h-4 w-full rounded" />
+                    </div>
+                  </div>
                 ))}
+              </div>
+            ) : (
+              <>
+                {/* Results */}
+                {schools.length > 0 && (
+                  <div className="space-y-6">
+                    {schools.map((school, index) => (
+                      <SchoolCard
+                        key={school.id}
+                        school={school}
+                        index={index}
+                        isFavorite={!!favorites[school.id]}
+                        toggleFavorite={toggleFavorite}
+                        onCompare={handleCompare}
+                        isInCompareList={schoolsToCompare.includes(school.id)}
+                      />
+                    ))}
 
-                {hasMore && (
-                  <div className="mt-8 flex justify-center">
-                    <Button
-                      onClick={loadMore}
-                      disabled={loadingMore}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      {loadingMore ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        "Load More Schools"
-                      )}
-                    </Button>
+                    {hasMore && (
+                      <div className="mt-8 flex justify-center">
+                        <Button
+                          onClick={loadMore}
+                          disabled={loadingMore}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {loadingMore ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Loading...
+                            </>
+                          ) : (
+                            "Load More Schools"
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            ) : null}
+
+                {/* No results */}
+                {schools.length === 0 && (
+                  <div className="text-center py-10 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-inner mt-8">
+                    <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                      No schools found
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Try adjusting your filters to find more schools.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </ResultsColumn>,
         ]}
         layout={{
           separateBoxes: true,
           boxGap: "6",
-          chatRatio: 0.35, // ≈ 1/3
+          chatRatio: 0.35,
           chatHeightMode: "vh",
           chatHeight: 90,
           stickyChat: false,
@@ -1143,7 +1150,7 @@ const FindSchools = () => {
           distributeCardWhitespace: true,
         }}
       />
-      {/* Floating Compare CTA */}
+
       {schoolsToCompare.length >= 2 && (
         <div className="fixed bottom-8 right-6 z-50">
           <Button
@@ -1154,15 +1161,7 @@ const FindSchools = () => {
                 )}`
               )
             }
-            className="
-        rounded-lg px-5 py-3 text-white
-        bg-blue-600 hover:bg-blue-700
-        shadow-lg ring-1 ring-blue-300/50
-        animate-[pulse_1.4s_ease-in-out_infinite]
-
-        dark:bg-blue-600 dark:hover:bg-blue-400
-        dark:shadow-blue-500/30 dark:ring-2 dark:ring-blue-400/60
-      "
+            className="rounded-lg px-5 py-3 text-white bg-blue-600 hover:bg-blue-700 shadow-lg ring-1 ring-blue-300/50 animate-[pulse_1.4s_ease-in-out_infinite] dark:bg-blue-600 dark:hover:bg-blue-400 dark:shadow-blue-500/30 dark:ring-2 dark:ring-blue-400/60"
           >
             Compare Selected ({schoolsToCompare.length})
           </Button>

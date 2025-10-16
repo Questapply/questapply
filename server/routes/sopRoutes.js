@@ -1058,8 +1058,12 @@ router.delete("/documents", authenticateToken, async (req, res) => {
 router.get("/schools", authenticateToken, async (req, res) => {
   try {
     const search = (req.query.search || "").toString().trim();
-    let limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    let offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const rawLimit = Number.parseInt(String(req.query.limit ?? "20"), 10);
+    const rawOffset = Number.parseInt(String(req.query.offset ?? "0"), 10);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.max(1, Math.min(rawLimit, 100))
+      : 20;
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
 
     const params = [];
     let where = "";
@@ -1068,10 +1072,8 @@ router.get("/schools", authenticateToken, async (req, res) => {
       params.push(`%${search}%`);
     }
 
-    const [rows] = await db.execute(
-      `SELECT ID AS id, name FROM ${T_SCHOOLS} ${where} ORDER BY name LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+    const sql = `SELECT ID AS id, name FROM ${T_SCHOOLS} ${where} ORDER BY name LIMIT ${offset}, ${limit}`;
+    const [rows] = await db.execute(sql, params);
 
     // total (اختیاری)
     let total = rows.length;

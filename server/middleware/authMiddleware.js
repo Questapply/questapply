@@ -16,6 +16,7 @@ export const authenticateToken = (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   if (PUBLIC_PATHS.has(req.path)) return next();
   const authHeader = req.headers["authorization"] || "";
+
   const token = authHeader?.split(" ")[1];
 
   if (!token) {

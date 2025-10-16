@@ -19,12 +19,17 @@ export interface CitizenshipData {
   country: string;
   residence: string;
 }
-
-export interface EducationData {
+export interface EducationItem {
   degree: string;
   university: string;
   major: string;
   gpa: string;
+  startYear?: string;
+  endYear?: string;
+}
+
+export interface EducationBlocks {
+  items: EducationItem[];
 }
 export type CountryOpt = { id: string; name: string; code?: string };
 export type Option = { id: string; name: string };
@@ -60,7 +65,7 @@ export interface ProgramsData {
 
 export interface StepData {
   citizenship: CitizenshipData;
-  education: EducationData;
+  education: { items: EducationItem[] };
   goals: GoalsData;
   language: LanguageData;
   tests: TestData;

@@ -41,6 +41,7 @@ export async function prefillResume() {
     },
   });
   if (!res.ok) throw new Error(`Prefill HTTP ${res.status}`);
+  console.log("Profile resume:->", res);
   return res.json(); // { sections, context }
 }
 

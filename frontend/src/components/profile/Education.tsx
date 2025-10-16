@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "../ui/button";
-import { School, ArrowRight } from "lucide-react";
+import { School, ArrowRight, Plus, Trash2 } from "lucide-react";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import {
@@ -12,14 +12,44 @@ import {
   SelectValue,
 } from "../ui/select";
 
+interface SingleEdu {
+  degree: string;
+  university: string;
+  major: string;
+  gpa: string;
+  start?: string;
+  end?: string;
+}
 interface EducationProps {
   onNext: (data: any) => void;
-  data: {
-    degree: string;
-    university: string;
-    major: string;
-    gpa: string;
-  };
+  data:
+    | SingleEdu
+    | {
+        degree: string;
+        university: string;
+        major: string;
+        gpa: string;
+        startYear?: string;
+        endYear?: string;
+      }
+    | {
+        items?: {
+          degree: string;
+          university: string;
+          major: string;
+          gpa: string;
+          startYear?: string;
+          endYear?: string;
+        }[];
+      }
+    | Array<{
+        degree: string;
+        university: string;
+        major: string;
+        gpa: string;
+        startYear?: string;
+        endYear?: string;
+      }>;
 }
 
 const degreeOptions = [
@@ -32,66 +62,151 @@ const degreeOptions = [
   "Other",
 ];
 
+const toLocal = (x: any): SingleEdu => ({
+  degree: x?.degree || "",
+  university: x?.university || "",
+  major: x?.major || "",
+  gpa: x?.gpa || "",
+  start: x?.start ?? x?.startYear ?? "",
+  end: x?.end ?? x?.endYear ?? "",
+});
+
 const Education: React.FC<EducationProps> = ({ onNext, data }) => {
-  const [degree, setDegree] = useState(data.degree || "");
-  const [university, setUniversity] = useState(data.university || "");
-  const [major, setMajor] = useState(data.major || "");
-  const [gpa, setGpa] = useState(data.gpa || "");
-  const [errors, setErrors] = useState({
+  // ---------- derive initial blocks from props ----------
+  const initialBlocks: SingleEdu[] = useMemo(() => {
+    if (Array.isArray(data)) {
+      return (data as any[]).map(toLocal);
+    }
+    if (data && typeof data === "object" && "items" in (data as any)) {
+      const arr = ((data as any).items || []) as any[];
+      return arr.length ? arr.map(toLocal) : [toLocal({})];
+    }
+    if (data && typeof data === "object") {
+      return [toLocal(data)];
+    }
+    return [toLocal({})];
+  }, [data]);
+
+  const [items, setItems] = useState<SingleEdu[]>(
+    initialBlocks.length ? initialBlocks : [toLocal({})]
+  );
+
+  // ← مهم: وقتی از والد برگشتی و data عوض شد، state را sync کن
+  useEffect(() => {
+    const next = initialBlocks.length ? initialBlocks : [toLocal({})];
+    setItems(next);
+    setErrors(
+      next.map(() => ({
+        degree: false,
+        university: false,
+        major: false,
+        gpa: false,
+        start: false,
+        end: false,
+      }))
+    );
+  }, [initialBlocks]);
+  useEffect(() => {
+    console.log("[Education] props.data (from parent):", data);
+    console.log("[Education] derived initialBlocks:", initialBlocks);
+    setItems(
+      initialBlocks.length
+        ? initialBlocks
+        : [
+            {
+              degree: "",
+              university: "",
+              major: "",
+              gpa: "",
+              start: "",
+              end: "",
+            },
+          ]
+    );
+  }, [initialBlocks, data]);
+
+  const blankErr = {
     degree: false,
     university: false,
     major: false,
     gpa: false,
-  });
+    start: false,
+    end: false,
+  };
+  const [errors, setErrors] = useState<
+    {
+      degree: boolean;
+      university: boolean;
+      major: boolean;
+      gpa: boolean;
+      start: boolean;
+      end: boolean;
+    }[]
+  >(items.map(() => ({ ...blankErr })));
+
+  const updateField = (idx: number, key: keyof SingleEdu, value: string) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [key]: value };
+      return next;
+    });
+  };
+
+  const addBlock = () => {
+    setItems((prev) => [...prev, toLocal({})]);
+    setErrors((prev) => [...prev, { ...blankErr }]);
+  };
+
+  const removeBlock = (idx: number) => {
+    if (idx <= 0) return; // بلاک اول حذف نشود
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+    setErrors((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handleNext = () => {
-    // Validate
-    const newErrors = {
-      degree: !degree,
-      university: !university,
-      major: !major,
-      gpa: !gpa,
-    };
+    const newErr = items.map((it) => ({
+      degree: !it.degree,
+      university: !it.university,
+      major: !it.major,
+      gpa: !it.gpa,
+      start: !it.start,
+      end: !it.end,
+    }));
+    setErrors(newErr);
+    if (newErr.some((e) => Object.values(e).some(Boolean))) return;
 
-    setErrors(newErrors);
-
-    if (!Object.values(newErrors).includes(true)) {
-      onNext({ degree, university, major, gpa });
-    }
+    const normalized = items.map((it) => ({
+      degree: it.degree,
+      university: it.university,
+      major: it.major,
+      gpa: it.gpa,
+      // برای سازگاری با بک‌اند
+      start: it.start || "",
+      end: it.end || "",
+      // برای سازگاری با تایپ‌های داخلی/والد
+      startYear: it.start || "",
+      endYear: it.end || "",
+    }));
+    onNext({ items: normalized }); // ← همیشه آرایه
   };
 
-  const handlePrevious = () => {
-    // Go back to the previous section (Citizenship)
-    onNext({ type: "back" });
-  };
+  const handlePrevious = () => onNext({ type: "back" });
 
   // Animations
   const containerVariants = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-      },
-    },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } },
   };
-
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0 },
   };
-
   const iconAnimation = {
     hidden: { scale: 0.8, opacity: 0 },
     show: {
       scale: 1,
       opacity: 1,
-      transition: {
-        type: "spring",
-        stiffness: 260,
-        damping: 20,
-        delay: 0.1,
-      },
+      transition: { type: "spring", stiffness: 260, damping: 20, delay: 0.1 },
     },
   };
 
@@ -103,6 +218,7 @@ const Education: React.FC<EducationProps> = ({ onNext, data }) => {
         animate="show"
         className="space-y-8"
       >
+        {/* Header */}
         <motion.div variants={itemVariants} className="text-center">
           <div className="flex justify-center mb-4">
             <motion.div
@@ -116,95 +232,198 @@ const Education: React.FC<EducationProps> = ({ onNext, data }) => {
             Your Educational Background
           </h1>
           <p className="mt-3 text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-            Let us know about your most recent education to help match you with
-            appropriate programs.
+            <strong>Note:</strong> Please list every educational institution
+            where you were — or are currently — enrolled in an undergraduate,
+            graduate, or high school program
           </p>
         </motion.div>
 
-        <motion.div
-          variants={itemVariants}
-          className="grid md:grid-cols-2 gap-6"
-        >
-          <div className="space-y-2">
-            <Label htmlFor="degree">What was your last degree?</Label>
-            <Select value={degree} onValueChange={setDegree}>
-              <SelectTrigger
-                id="degree"
-                className={`w-full ${
-                  errors.degree ? "border-red-500 dark:border-red-500" : ""
-                }`}
-              >
-                <SelectValue placeholder="Select your most recent degree" />
-              </SelectTrigger>
-              <SelectContent>
-                {degreeOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.degree && (
-              <p className="text-red-500 text-sm">Please select your degree</p>
-            )}
-          </div>
+        {/* Blocks */}
+        {items.map((it, idx) => (
+          <motion.div
+            key={idx}
+            variants={itemVariants}
+            className="space-y-6 border rounded-xl p-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">
+                Education #{idx + 1}
+              </span>
+              {idx > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeBlock(idx)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove
+                </Button>
+              )}
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="university">Which university did you attend?</Label>
-            <Input
-              id="university"
-              value={university}
-              onChange={(e) => setUniversity(e.target.value)}
-              placeholder="Enter university name"
-              className={
-                errors.university ? "border-red-500 dark:border-red-500" : ""
-              }
-            />
-            {errors.university && (
-              <p className="text-red-500 text-sm">
-                Please enter your university
-              </p>
-            )}
-          </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Degree */}
+              <div className="space-y-2">
+                <Label htmlFor={`degree-${idx}`}>What was your degree?</Label>
+                <Select
+                  value={it.degree}
+                  onValueChange={(v) => updateField(idx, "degree", v)}
+                >
+                  <SelectTrigger
+                    id={`degree-${idx}`}
+                    className={`w-full ${
+                      errors[idx]?.degree
+                        ? "border-red-500 dark:border-red-500"
+                        : ""
+                    }`}
+                  >
+                    <SelectValue placeholder="Select your most recent degree" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {degreeOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors[idx]?.degree && (
+                  <p className="text-red-500 text-sm">
+                    Please select your degree
+                  </p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="major">What was your major/field of study?</Label>
-            <Input
-              id="major"
-              value={major}
-              onChange={(e) => setMajor(e.target.value)}
-              placeholder="Enter your major"
-              className={
-                errors.major ? "border-red-500 dark:border-red-500" : ""
-              }
-            />
-            {errors.major && (
-              <p className="text-red-500 text-sm">Please enter your major</p>
-            )}
-          </div>
+              {/* University */}
+              <div className="space-y-2">
+                <Label htmlFor={`university-${idx}`}>
+                  Which university did you attend?
+                </Label>
+                <Input
+                  id={`university-${idx}`}
+                  value={it.university}
+                  onChange={(e) =>
+                    updateField(idx, "university", e.target.value)
+                  }
+                  placeholder="Enter university name"
+                  className={
+                    errors[idx]?.university
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }
+                />
+                {errors[idx]?.university && (
+                  <p className="text-red-500 text-sm">
+                    Please enter your university
+                  </p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="gpa">What was your GPA? (out of 4.0)</Label>
-            <Input
-              id="gpa"
-              value={gpa}
-              onChange={(e) => setGpa(e.target.value)}
-              placeholder="Enter your GPA (e.g., 3.5)"
-              className={errors.gpa ? "border-red-500 dark:border-red-500" : ""}
-            />
-            {errors.gpa && (
-              <p className="text-red-500 text-sm">Please enter your GPA</p>
-            )}
-          </div>
-        </motion.div>
+              {/* Major */}
+              <div className="space-y-2">
+                <Label htmlFor={`major-${idx}`}>
+                  What was your major/field of study?
+                </Label>
+                <Input
+                  id={`major-${idx}`}
+                  value={it.major}
+                  onChange={(e) => updateField(idx, "major", e.target.value)}
+                  placeholder="Enter your major"
+                  className={
+                    errors[idx]?.major
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }
+                />
+                {errors[idx]?.major && (
+                  <p className="text-red-500 text-sm">
+                    Please enter your major
+                  </p>
+                )}
+              </div>
 
+              {/* GPA */}
+              <div className="space-y-2">
+                <Label htmlFor={`gpa-${idx}`}>
+                  What was your GPA? (out of 4.0)
+                </Label>
+                <Input
+                  id={`gpa-${idx}`}
+                  value={it.gpa}
+                  onChange={(e) => updateField(idx, "gpa", e.target.value)}
+                  placeholder="Enter your GPA (e.g., 3.5)"
+                  className={
+                    errors[idx]?.gpa ? "border-red-500 dark:border-red-500" : ""
+                  }
+                />
+                {errors[idx]?.gpa && (
+                  <p className="text-red-500 text-sm">Please enter your GPA</p>
+                )}
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor={`start-${idx}`}>Start date / year</Label>
+                <Input
+                  id={`start-${idx}`}
+                  value={it.start || ""}
+                  onChange={(e) => updateField(idx, "start", e.target.value)}
+                  placeholder="Start year (e.g., 2020)"
+                  className={
+                    errors[idx]?.start
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }
+                />
+                {errors[idx]?.start && (
+                  <p className="text-red-500 text-sm">
+                    Please enter start date
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`end-${idx}`}>End date / year</Label>
+                <Input
+                  id={`end-${idx}`}
+                  value={it.end || ""}
+                  onChange={(e) => updateField(idx, "end", e.target.value)}
+                  placeholder="End year (e.g., 2024)"
+                  className={
+                    errors[idx]?.end ? "border-red-500 dark:border-red-500" : ""
+                  }
+                />
+                {errors[idx]?.end && (
+                  <p className="text-red-500 text-sm">Please enter end date</p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+
+        {/* Actions */}
         <motion.div
           variants={itemVariants}
           className="flex justify-between pt-6"
         >
-          <Button variant="outline" onClick={handlePrevious} className="px-8">
-            Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handlePrevious} className="px-8">
+              Back
+            </Button>
+            <Button
+              type="button"
+              onClick={addBlock}
+              variant="outline"
+              className="px-6"
+              title="Add another education block"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add
+            </Button>
+          </div>
+
           <Button
             onClick={handleNext}
             className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8 py-2 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"

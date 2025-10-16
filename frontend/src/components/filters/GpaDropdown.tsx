@@ -93,7 +93,7 @@ const GpaDropdown: React.FC<Props> = ({
               className={cn(
                 "flex items-center gap-2 w-full justify-between h-10 !py-0 px-3 text-inherit rounded-full",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
-                "h-7 md:h-8 !py-0 px-3",
+                "h-7 md:h-fit !py-0 px-3",
                 buttonClassName
               )}
               title={pretty}

@@ -20,6 +20,7 @@ const TestsActions: React.FC<TestsActionsProps> = ({
         Back
       </Button>
       <Button
+        type="button"
         onClick={onNext}
         className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8 py-2 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
       >

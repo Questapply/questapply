@@ -113,11 +113,14 @@ const StandardizedTests: React.FC<StandardizedTestsProps> = ({
 
   // باز/بسته کردن هر بخش
   const handleToggleTest = (testId: string) => {
-    setSelectedTests((prev) => ({ ...prev, [testId]: !prev[testId] }));
-    setTestData((prev) => ({
-      ...prev,
-      [testId]: { ...prev[testId], active: !selectedTests[testId] },
-    }));
+    setSelectedTests((prev) => {
+      const nextActive = !prev[testId];
+      setTestData((prevData) => ({
+        ...prevData,
+        [testId]: { ...prevData[testId], active: nextActive },
+      }));
+      return { ...prev, [testId]: nextActive };
+    });
   };
 
   // تغییر مقدار هر فیلد
@@ -160,8 +163,7 @@ const StandardizedTests: React.FC<StandardizedTestsProps> = ({
       }
     }
 
-    const first = Object.keys(payloadScores)[0] || "";
-    onNext({ type: first, scores: payloadScores }); // اگر خالی باشد {} می‌رود و مسیر بلوکه نمی‌شود
+    onNext({ scores: payloadScores }); // اگر خالی باشد {} می‌رود و مسیر بلوکه نمی‌شود
   };
 
   const handlePrevious = () => onNext({ type: "back" });
@@ -195,7 +197,6 @@ const StandardizedTests: React.FC<StandardizedTestsProps> = ({
           handleToggleTest={handleToggleTest}
           handleScoreChange={handleScoreChange}
           variants={itemVariants}
-          showSwitches={true} // اگر سوییچ دارید؛ یا از کلیکِ هدر برای باز/بسته استفاده می‌کنید
         />
 
         <TestsActions

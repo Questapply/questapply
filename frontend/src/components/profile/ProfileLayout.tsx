@@ -26,25 +26,32 @@ const steps: Step[] = [
   { id: "programs", title: "Number of Programs", icon: "List" },
   { id: "complete", title: "Complete", icon: "Check" },
 ];
-const computeCompletionMap = (d: StepData) => ({
-  citizenship: Boolean(d.citizenship?.country && d.citizenship?.residence),
-  education: Boolean(
-    d.education?.degree ||
-      d.education?.university ||
-      d.education?.major ||
-      d.education?.gpa
-  ),
-  goals: Boolean(d.goals?.country && d.goals?.level),
-  language: Boolean(d.language?.test && d.language?.score),
-  tests: Boolean(d.tests?.type), // ساده و بی‌خطر؛ لاجیک دقیق داخل خود مرحله است
-  priorities: Boolean(d.priorities?.options?.length),
-  financial: Boolean(
-    d.financial &&
-      (d.financial.budget || d.financial.requiresFunding !== undefined)
-  ),
-  programs: Boolean(d.programs && d.programs.count > 0),
-  complete: true,
-});
+const computeCompletionMap = (d: StepData) => {
+  const e = d.education?.items?.[0];
+  return {
+    citizenship: Boolean(d.citizenship?.country && d.citizenship?.residence),
+    education: Boolean(
+      e &&
+        (e.degree ||
+          e.university ||
+          e.major ||
+          e.gpa ||
+          e.startYear ||
+          e.endYear) // می‌تونی start/end هم اضافه کنی
+    ),
+    goals: Boolean(d.goals?.country && d.goals?.level),
+    language: Boolean(d.language?.test && d.language?.score),
+    tests: Boolean(d.tests?.type),
+    priorities: Boolean(d.priorities?.options?.length),
+    financial: Boolean(
+      d.financial &&
+        (d.financial.budget || d.financial.requiresFunding !== undefined)
+    ),
+    programs: Boolean(d.programs && d.programs.count > 0),
+    complete: true,
+  };
+};
+
 interface ProfileLayoutProps {
   isDarkMode: boolean;
   onToggleTheme: () => void;
@@ -80,7 +87,18 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
 
   const [formData, setFormData] = useState<StepData>({
     citizenship: { country: "", residence: "" },
-    education: { degree: "", university: "", major: "", gpa: "" },
+    education: {
+      items: [
+        {
+          degree: "",
+          university: "",
+          major: "",
+          gpa: "",
+          startYear: "",
+          endYear: "",
+        },
+      ],
+    },
     goals: { country: "", level: "", field: "", availableFields: [] },
     language: { test: "", score: "" },
     tests: { type: "", scores: {} },
@@ -109,12 +127,10 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           return;
         }
 
-        // Check if token already has Bearer prefix
         const tokenToUse = token.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
 
-        // استفاده از آدرس کامل API
         const profileRes = await fetch(`${API_URL}/user/profile-form`, {
           headers: { Authorization: tokenToUse, Accept: "application/json" },
         });
@@ -126,42 +142,75 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
         }
 
         const data = await profileRes.json();
-        console.log("ProfileLayout: Received profile data from API:", data); // **این لاگ مهم است**
-        console.log(
-          "ProfileLayout: isProfileComplete from API:",
-          data.isProfileComplete
-        );
         setProfileCompletionStatus(data.isProfileComplete || false);
-        // آپدیت کردن formData با داده‌های دریافتی
-        setFormData((prevData) => {
-          return {
-            ...prevData,
-            citizenship: {
-              country: data.citizenship?.country?.name || "",
-              residence: data.citizenship?.residence?.name || "",
-            },
-            education: {
-              degree: data.education?.degree || "",
-              university: data.education?.university || "",
-              major: data.education?.major || "",
-              gpa: data.education?.gpa || "",
-            },
-            goals: data.goals || {
-              country: "",
-              level: "",
-              field: "",
-              availableFields: [],
-            },
-            language: data.language || {
-              test: "",
-              score: "",
-            },
-            tests: data.tests || {
-              type: "",
-              scores: {},
-            },
-          };
+
+        // ---- normalize education to { items: [...] } with startYear/endYear ----
+        type AnyEdu = any;
+        const eduRaw: AnyEdu = data.education ?? {};
+        let eduItems: Array<{
+          degree: string;
+          university: string;
+          major: string;
+          gpa: string;
+          startYear?: string;
+          endYear?: string;
+        }> = [];
+
+        const toItem = (e: AnyEdu) => ({
+          degree: e?.degree || "",
+          university: e?.university || "",
+          major: e?.major || "",
+          gpa: e?.gpa || "",
+          // پشتیبانی از start/end یا startYear/endYear
+          startYear: e?.startYear ?? e?.start ?? "",
+          endYear: e?.endYear ?? e?.end ?? "",
         });
+
+        if (Array.isArray(eduRaw?.items) && eduRaw.items.length) {
+          eduItems = eduRaw.items.map(toItem);
+        } else if (
+          eduRaw &&
+          (eduRaw.degree ||
+            eduRaw.university ||
+            eduRaw.major ||
+            eduRaw.gpa ||
+            eduRaw.startYear ||
+            eduRaw.endYear ||
+            eduRaw.start ||
+            eduRaw.end)
+        ) {
+          // شیء تکی برگشته
+          eduItems = [toItem(eduRaw)];
+        } else {
+          // هیچ دیتایی نیست: یک بلاک خالی
+          eduItems = [
+            {
+              degree: "",
+              university: "",
+              major: "",
+              gpa: "",
+              startYear: "",
+              endYear: "",
+            },
+          ];
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          citizenship: {
+            country: data.citizenship?.country?.name || "",
+            residence: data.citizenship?.residence?.name || "",
+          },
+          education: { items: eduItems },
+          goals: data.goals || {
+            country: "",
+            level: "",
+            field: "",
+            availableFields: [],
+          },
+          language: data.language || { test: "", score: "" },
+          tests: data.tests || { type: "", scores: {} },
+        }));
       } catch (error) {
         console.error("Error fetching profile data:", error);
       } finally {
@@ -191,70 +240,55 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
   }, [completionMap, filteredSteps]);
 
   const handleNext = async (data: any) => {
-    // Find the current step index
-    const currentIndex = steps.findIndex((step) => step.id === currentStep);
+    // 1) از filteredSteps استفاده کن
+    const currentIndex = filteredSteps.findIndex((s) => s.id === currentStep);
 
-    // Check if this is a "back" navigation
     if (data.type === "back") {
-      // Move back one step if possible
       if (currentIndex > 0) {
-        setCurrentStep(steps[currentIndex - 1].id as ProfileStep);
+        setCurrentStep(filteredSteps[currentIndex - 1].id as ProfileStep);
       }
       return;
     }
 
-    // ذخیره داده‌ها در سرور (برای مراحل citizenship و education)
+    // 2) ذخیره در سرور همانند کد خودت
     if (
-      currentStep === "citizenship" ||
-      currentStep === "education" ||
-      currentStep === "goals" ||
-      currentStep === "language" ||
-      currentStep === "tests"
+      ["citizenship", "education", "goals", "language", "tests"].includes(
+        currentStep
+      )
     ) {
       try {
         const token = localStorage.getItem("token");
-        if (!token) {
-          console.error("No token found");
-          return;
-        }
-
-        // Check if token already has Bearer prefix
+        if (!token) return;
         const tokenToUse = token.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
-
         const apiUrl = `${API_URL}/user/profile-form`;
 
-        let requestBody = {};
-
+        let requestBody: any = {};
         if (currentStep === "citizenship") {
-          // تبدیل نام کشور به فرمت مورد نیاز سرور (کد و نام)
-          const citizenshipData = {
-            country: {
-              name: data.country,
-              code: countriesMap[data.country] || "",
-            },
-            residence: {
-              name: data.residence,
-              code: countriesMap[data.residence] || "",
+          requestBody = {
+            citizenship: {
+              country: {
+                name: data.country,
+                code: countriesMap[data.country] || "",
+              },
+              residence: {
+                name: data.residence,
+                code: countriesMap[data.residence] || "",
+              },
             },
           };
-          requestBody = { citizenship: citizenshipData };
         } else if (currentStep === "education") {
-          // ارسال مستقیم داده‌های education
           requestBody = { education: data };
         } else if (currentStep === "goals") {
-          // ارسال داده‌های goals
           requestBody = { goals: data };
         } else if (currentStep === "language") {
-          // ارسال داده‌های language
           requestBody = { language: data };
         } else if (currentStep === "tests") {
-          // ارسال داده‌های tests
           requestBody = { tests: data };
         }
 
-        const response = await fetch(apiUrl, {
+        const resp = await fetch(apiUrl, {
           method: "POST",
           headers: {
             Authorization: tokenToUse,
@@ -262,19 +296,13 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           },
           body: JSON.stringify(requestBody),
         });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API Error:", response.status, errorText);
-          throw new Error(
-            `Failed to save ${currentStep} data: ${response.status}`
-          );
+        if (!resp.ok) {
+          const t = await resp.text();
+          console.error("API Error:", resp.status, t);
+          throw new Error(`Failed to save ${currentStep} data: ${resp.status}`);
         }
-
-        // داده‌ها با موفقیت ذخیره شدند
-      } catch (error) {
-        console.error(`Error saving ${currentStep} data:`, error);
-        // نمایش پیام خطا به کاربر
+      } catch (err) {
+        console.error(`Error saving ${currentStep} data:`, err);
         toast({
           title: "Error",
           description: `Failed to save ${currentStep} data. Please try again.`,
@@ -284,29 +312,30 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
       }
     }
 
-    // Update form data for forward navigation
-    setFormData((prevData) => ({
-      ...prevData,
-      [currentStep]: data,
-    }));
+    // 3) آپدیت فرم در استیت
+    setFormData((prev) => ({ ...prev, [currentStep]: data }));
 
-    // If this is the last step, finalize the process and navigate to plans page
+    // 4) ناوبری بعد از ذخیره
     if (currentStep === "complete") {
       navigate("/apply-with-us/plans");
       return;
     }
+    console.log(
+      "[Parent] handleNext called for step:",
+      currentStep,
+      "data:",
+      data
+    );
+    const lastIndex = filteredSteps.length - 1;
+    const secondLastIndex = filteredSteps.length - 2;
 
-    // If this is the second-to-last step, navigate to the complete step
-    if (currentIndex === steps.length - 2) {
+    if (currentIndex === secondLastIndex) {
       setCurrentStep("complete");
-
-      // Show success toast
       toast({
         title: "Profile Almost Complete!",
         description: "Just one more step to finalize your profile.",
       });
-    } else if (currentIndex < filteredSteps.length - 2) {
-      // Move to the next step
+    } else if (currentIndex >= 0 && currentIndex < lastIndex) {
       setCurrentStep(filteredSteps[currentIndex + 1].id as ProfileStep);
     }
   };
@@ -438,20 +467,6 @@ const ProfileLayout = ({ isDarkMode, onToggleTheme }: ProfileLayoutProps) => {
           </AnimatePresence>
         </div>
       </main>
-
-      {/* Skip button (except for complete step) */}
-      {/* {currentStep !== 'complete' && (
-        <div className="flex justify-center p-6">
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/dashboard')}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-          >
-            Skip for now
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      )} */}
     </div>
   );
 };

@@ -49,7 +49,7 @@ export interface FilterOption {
 }
 export type AvailableCountry = {
   id: string | number;
-  country: string | number;
+  country: number | string;
   name: string;
 };
 

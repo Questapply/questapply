@@ -26,6 +26,9 @@ import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";
 import { useToast } from "../../ui/use-toast";
 
+const RAW = (import.meta as any)?.env?.VITE_API_URL || "";
+const ROOT = RAW ? RAW.replace(/\/+$/, "") : "";
+const API_BASE = ROOT ? `${ROOT}/api` : "/api";
 /** ================== Types (front-end contract; do NOT change the API shape) ================== */
 export interface CompareProgramsProps {
   isDarkMode: boolean;
@@ -502,7 +505,7 @@ function ComparePrograms({
     setLoading(true);
     setErrorText("");
 
-    const url = `/api/program-data/compare?ids=${encodeURIComponent(
+    const url = `${API_BASE}/program-data/compare?ids=${encodeURIComponent(
       ids.join(",")
     )}`;
     fetch(url, {
@@ -561,7 +564,7 @@ function ComparePrograms({
     try {
       const token = localStorage.getItem("token") || "";
       const resp = await fetch(
-        `/api/program-data/search?q=${encodeURIComponent(query)}`,
+        `${API_BASE}/program-data/search?q=${encodeURIComponent(query)}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

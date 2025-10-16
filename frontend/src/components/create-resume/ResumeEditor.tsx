@@ -1,9 +1,9 @@
-// src/components/ResumeEditor.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
+import { Input } from "../ui/input";
 import { RotateCcw, Save, Download, Trash2, Plus } from "lucide-react";
 import { useToast } from "../ui/use-toast";
 import {
@@ -14,12 +14,6 @@ import {
   getResume,
 } from "@/api/resumeApi";
 
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-  TooltipContent,
-} from "../ui/tooltip";
 import { Switch } from "../ui/switch";
 
 import {
@@ -32,11 +26,10 @@ import {
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Label as UiLabel } from "../ui/label";
 
-// ---- Types ----
+/* ---------- Types ---------- */
 export type SectionValue =
   | { title: string; content: string }
   | { title: string; content: any };
-
 export type SectionsShape = Record<string, SectionValue>;
 
 type Props = {
@@ -50,7 +43,6 @@ type Props = {
   countryBadge?: string;
 };
 
-// ---- Structured data models ----
 type ItemListData = { items: string[] };
 
 type ExperienceBlock = {
@@ -72,32 +64,18 @@ type EducationBlock = {
 };
 type EducationData = { blocks: EducationBlock[] };
 
-type CertBlock = {
-  header: string;
-  skills: string[];
-};
+type CertBlock = { header: string; skills: string[] };
 type CertData = { blocks: CertBlock[] };
 
-type AwardBlock = {
-  title: string;
-  orgAndDate: string;
-};
+type AwardBlock = { title: string; orgAndDate: string };
 type AwardData = { blocks: AwardBlock[] };
 
-type MembershipBlock = {
-  organization: string;
-  date: string;
-};
+type MembershipBlock = { organization: string; date: string };
 type MembershipData = { blocks: MembershipBlock[] };
 
-type ReferenceBlock = {
-  nameTitle: string;
-  place: string;
-  contact: string;
-};
+type ReferenceBlock = { nameTitle: string; place: string; contact: string };
 type ReferenceData = { blocks: ReferenceBlock[] };
 
-// ----- Personal (ساختاری، بدون AddNew)
 type PersonalData = {
   fullName: string;
   headline: string;
@@ -106,7 +84,7 @@ type PersonalData = {
   linkedin: string;
 };
 
-// ---- Structured section keys ----
+/* ---------- Keys ---------- */
 const STRUCTURED_KEYS = {
   interests: "interests",
   hobbies: "hobbies",
@@ -119,7 +97,9 @@ const STRUCTURED_KEYS = {
   refs: "refs",
 } as const;
 
-// ---- Defaults ----
+const PERSONAL_KEY = "personal";
+
+/* ---------- Defaults ---------- */
 const DEFAULT_RI_ITEMS = [
   "Artificial Intelligence",
   "Machine Learning",
@@ -157,8 +137,7 @@ const DEFAULT_EDU_BLOCK: EducationBlock = {
 const DEFAULT_EDU: EducationData = { blocks: [DEFAULT_EDU_BLOCK] };
 
 const DEFAULT_CERT_BLOCK: CertBlock = {
-  header:
-    "Certified Information Systems Professional (CISSP) (ISC), April 2023",
+  header: "Certified Information Systems Professional (CISSP) (ISC), Apr 2023",
   skills: [
     "Proficient in Python , Java and C++",
     "Experienced in machine learning and AI development",
@@ -193,10 +172,8 @@ const DEFAULT_REF_BLOCK_2: ReferenceBlock = {
 const DEFAULT_REFS: ReferenceData = {
   blocks: [DEFAULT_REF_BLOCK_1, DEFAULT_REF_BLOCK_2],
 };
-// --- Personal (structured, no Add New)
 
-const PERSONAL_KEY = "personal";
-
+/* ---------- Personal helpers ---------- */
 function personalToMultiline(p: PersonalData): string {
   const lines = [
     p.fullName || "",
@@ -209,12 +186,23 @@ function personalToMultiline(p: PersonalData): string {
 }
 
 function defaultPersonalFromInitial(initial: SectionsShape): PersonalData {
-  const raw = (initial[PERSONAL_KEY] as any)?.content || "";
+  const raw = (initial[PERSONAL_KEY] as any)?.content ?? "";
+  if (raw && typeof raw === "object") {
+    const obj = raw as any;
+    return {
+      fullName: obj.fullName ?? obj.name ?? "",
+      headline: obj.headline ?? obj.title ?? "",
+      phone: obj.phone ?? "",
+      email: obj.email ?? "",
+      linkedin: obj.linkedin ?? "",
+    };
+  }
+
+  // ✅ اگر رشته بود، مثل قبل خط‌به‌خط بخون
   const lines = String(raw).split(/\r?\n/);
   return {
     fullName: lines[0] ?? "",
     headline: lines[1] ?? "",
-    // اگر در initial «Phone: …» و … بودند، پاکسازی کن
     phone: (lines[2] || "").replace(/^Phone:\s*/i, ""),
     email: (lines[3] || "").replace(/^Email:\s*/i, ""),
     linkedin: (lines[4] || "").replace(/^LinkedIn:\s*/i, ""),
@@ -230,12 +218,10 @@ function parsePersonalLoose(
     .map((l) => l.trim())
     .filter(Boolean);
   let out: PersonalData = { ...fallback };
-
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
   const phoneRe = /(phone[:\s\-]?|^\+?\d[\d\s\-\(\)]{6,})/i;
   const linkedRe = /linkedin\.com/i;
 
-  // خط اول را اگر ایمیل/تلفن/لینکدین نبود، به عنوان fullName بگذار
   if (
     lines[0] &&
     !emailRe.test(lines[0]) &&
@@ -247,23 +233,17 @@ function parsePersonalLoose(
 
   for (const l of lines.slice(1)) {
     const plain = l.replace(/^(Phone|Email|LinkedIn)\s*:\s*/i, "");
-    if (emailRe.test(plain)) {
-      out.email = plain;
-    } else if (linkedRe.test(plain)) {
-      out.linkedin = plain;
-    } else if (phoneRe.test(l)) {
-      // اگر به‌صورت "Phone: ..." بود
-      out.phone = plain;
-    } else {
-      // اگر هیچ‌کدام نبود و headline خالی است، بگذار تو headline
-      if (!out.headline) out.headline = l;
-    }
+    if (emailRe.test(plain)) out.email = plain;
+    else if (linkedRe.test(plain)) out.linkedin = plain;
+    else if (phoneRe.test(l)) out.phone = plain;
+    else if (!out.headline) out.headline = l;
   }
   return out;
 }
 
+/* ---------- Merge ---------- */
 function mergeFromApiSections(
-  initial: SectionsShape,
+  initial: SectionsShape, // این می‌تونه baseline باشه
   apiSections: Record<string, any> | undefined | null
 ): SectionsShape {
   const src = apiSections || {};
@@ -273,63 +253,253 @@ function mergeFromApiSections(
     const init = initial[key] as any;
     const fromApi = src[key];
 
-    // PERSONAL
+    // ---------- Personal ----------
     if (key === PERSONAL_KEY) {
       let model: PersonalData = { ...personalDefault };
 
       if (typeof fromApi === "string") {
+        // personal به‌صورت multiline
         model = parsePersonalLoose(fromApi, personalDefault);
       } else if (fromApi && typeof fromApi === "object") {
         if (typeof fromApi.content === "string") {
           model = parsePersonalLoose(fromApi.content, personalDefault);
         } else if (fromApi.content && typeof fromApi.content === "object") {
+          const c = fromApi.content as any;
           model = {
-            fullName: fromApi.content.fullName ?? personalDefault.fullName,
-            headline: fromApi.content.headline ?? personalDefault.headline,
-            phone: fromApi.content.phone ?? personalDefault.phone,
-            email: fromApi.content.email ?? personalDefault.email,
-            linkedin: fromApi.content.linkedin ?? personalDefault.linkedin,
+            fullName: c.fullName ?? c.name ?? personalDefault.fullName,
+            headline: c.headline ?? c.title ?? personalDefault.headline,
+            phone: c.phone ?? personalDefault.phone,
+            email: c.email ?? personalDefault.email,
+            linkedin: c.linkedin ?? personalDefault.linkedin,
           };
+        } else {
+          // از API آبجکت بدون content یا خالی
+          // هیچ‌چیز نکن؛ همون personalDefault باقی بمونه
+        }
+      } else {
+        // از API چیزی نیومده → مقدار موجود در init را نگه دار (object یا multiline)
+        const c = init?.content;
+        if (c && typeof c === "object") {
+          model = {
+            fullName: c.fullName ?? c.name ?? personalDefault.fullName,
+            headline: c.headline ?? c.title ?? personalDefault.headline,
+            phone: c.phone ?? personalDefault.phone,
+            email: c.email ?? personalDefault.email,
+            linkedin: c.linkedin ?? personalDefault.linkedin,
+          };
+        } else if (typeof c === "string" && c.trim()) {
+          model = parsePersonalLoose(c, personalDefault);
         }
       }
 
-      acc[key] = { title: init.title, content: model };
+      acc[key] = {
+        title:
+          (fromApi && typeof fromApi.title === "string" && fromApi.title.trim()
+            ? fromApi.title
+            : init.title) ?? "Personal Informations",
+        content: model,
+      };
       return acc;
     }
 
-    // ... بقیه‌ی merge که خودت داری (سکشن‌های ساختاری و ساده) ...
-    // (همان نسخه‌ی فعلی‌ات را نگه دار)
+    // ---------- سایر سکشن‌ها ----------
     if (fromApi && typeof fromApi === "object" && "content" in fromApi) {
       const val =
         typeof fromApi.content === "string" ? fromApi.content : fromApi.content;
+
       const isEmptyString =
         typeof val === "string" ? val.trim().length === 0 : false;
+
       acc[key] = {
         title:
           typeof fromApi.title === "string" && fromApi.title.trim()
             ? fromApi.title
             : init.title,
-        content: isEmptyString ? init.content || "" : val,
-      };
-      return acc;
-    }
-    if (typeof fromApi === "string") {
-      acc[key] = {
-        title: init.title,
-        content: fromApi.trim() ? fromApi : init.content || "",
+        // ⬅️ اگر رشته‌ی خالی از API آمد، مقدار init.content را دست‌نخورده نگه دار
+        content: isEmptyString ? init.content : val,
       };
       return acc;
     }
 
-    acc[key] = {
-      title: init.title,
-      content: typeof init.content === "string" ? init.content : "",
-    };
+    if (typeof fromApi === "string") {
+      acc[key] = {
+        title: init.title,
+        // ⬅️ اگر رشته‌ی API خالی بود، مقدار قبلی (init.content) را نگه دار
+        content: fromApi.trim() ? fromApi : init.content,
+      };
+      return acc;
+    }
+
+    // ⬅️ هیچ چیزی از API برای این سکشن نیامده: مقدار موجود را بدون تغییر نگه دار
+    acc[key] = { title: init.title, content: init.content };
     return acc;
   }, {} as SectionsShape);
 }
 
-// ---------- Component ----------
+/* ---------- Save helpers ---------- */
+function stripPlaceholders(items: string[]): string[] {
+  return (items || [])
+    .map((s) => String(s || "").trim())
+    .filter((s) => s && !/^new\s+/i.test(s));
+}
+
+function stringForSave(
+  sectionKey: string,
+  value: string,
+  initialSections: SectionsShape
+): string {
+  const init = ((initialSections[sectionKey] as any)?.content ?? "") as string;
+  const v = String(value ?? "").trim();
+  const i = String(init ?? "").trim();
+  return v === i ? "" : v;
+}
+
+function normalizeSectionsForSave(
+  input: SectionsShape,
+  initialSections: SectionsShape
+): SectionsShape {
+  const out: SectionsShape = {};
+  for (const [k, v] of Object.entries(input)) {
+    const title = (v as any).title;
+    const content = (v as any).content;
+
+    if (k === PERSONAL_KEY && content && typeof content === "object") {
+      out[k] = { title, content: personalToMultiline(content as PersonalData) };
+    } else if (typeof content === "string") {
+      out[k] = { title, content: stringForSave(k, content, initialSections) };
+    } else if (content && typeof content === "object") {
+      if ("items" in content && Array.isArray((content as any).items)) {
+        out[k] = {
+          title,
+          content: { items: stripPlaceholders((content as any).items) },
+        };
+      } else if (
+        "blocks" in content &&
+        Array.isArray((content as any).blocks)
+      ) {
+        const cleanedBlocks = (content as any).blocks.map((b: any) => {
+          const clone = { ...b };
+          if (Array.isArray(clone.bullets))
+            clone.bullets = stripPlaceholders(clone.bullets);
+          if (Array.isArray(clone.skills))
+            clone.skills = stripPlaceholders(clone.skills);
+          return clone;
+        });
+        out[k] = { title, content: { blocks: cleanedBlocks } };
+      } else out[k] = { title, content };
+    } else out[k] = { title, content };
+  }
+  return out;
+}
+function normalizeOneSectionForSave(
+  sectionKey: string,
+  one: SectionValue
+): SectionsShape {
+  const title = (one as any).title;
+  const content = (one as any).content;
+
+  if (sectionKey === PERSONAL_KEY && content && typeof content === "object") {
+    // پرسونال را همیشه به multiline تبدیل کن
+    return {
+      [sectionKey]: {
+        title,
+        content: personalToMultiline(content as PersonalData),
+      },
+    };
+  }
+
+  if (typeof content === "string") {
+    // رشته را همان‌طور که هست بفرست (بدون مقایسه با initial)
+    return { [sectionKey]: { title, content } };
+  }
+
+  if (content && typeof content === "object") {
+    // اگر items/blocks دارد، فقط placeholderها را تمیز کن ولی محتوا را کامل بفرست
+    if ("items" in content && Array.isArray((content as any).items)) {
+      const cleaned = stripPlaceholders((content as any).items);
+      return { [sectionKey]: { title, content: { items: cleaned } } };
+    }
+    if ("blocks" in content && Array.isArray((content as any).blocks)) {
+      const cleanedBlocks = (content as any).blocks.map((b: any) => {
+        const clone = { ...b };
+        if (Array.isArray(clone.bullets))
+          clone.bullets = stripPlaceholders(clone.bullets);
+        if (Array.isArray(clone.skills))
+          clone.skills = stripPlaceholders(clone.skills);
+        return clone;
+      });
+      return { [sectionKey]: { title, content: { blocks: cleanedBlocks } } };
+    }
+    return { [sectionKey]: { title, content } };
+  }
+
+  return { [sectionKey]: { title, content } };
+}
+
+function cleanOneSectionForSave(sectionKey: string, section: any) {
+  // هرچه در state هست را بدون diff می‌فرستیم؛ فقط placeholderهای لیست‌ها را حذف می‌کنیم
+  const title = section?.title ?? "";
+  const content = section?.content;
+
+  // Personal: آبجکت را به multiline تبدیل کن تا با بک‌اند سازگار بماند
+  if (sectionKey === PERSONAL_KEY && content && typeof content === "object") {
+    return { title, content: personalToMultiline(content) };
+  }
+
+  if (typeof content === "string") {
+    return { title, content: content }; // همینی که هست
+  }
+
+  if (content && typeof content === "object") {
+    // items
+    if (Array.isArray((content as any).items)) {
+      const items = (content as any).items
+        .map((s: any) => String(s || "").trim())
+        .filter((s: string) => s && !/^new\s+/i.test(s));
+      return { title, content: { items } };
+    }
+    // blocks
+    if (Array.isArray((content as any).blocks)) {
+      const blocks = (content as any).blocks.map((b: any) => {
+        const clone = { ...b };
+        if (Array.isArray(clone.bullets)) {
+          clone.bullets = clone.bullets
+            .map((s: any) => String(s || "").trim())
+            .filter((s: string) => s && !/^new\s+/i.test(s));
+        }
+        if (Array.isArray(clone.skills)) {
+          clone.skills = clone.skills
+            .map((s: any) => String(s || "").trim())
+            .filter((s: string) => s && !/^new\s+/i.test(s));
+        }
+        return clone;
+      });
+      return { title, content: { blocks } };
+    }
+  }
+
+  // سایر ساختارها
+  return { title, content };
+}
+
+async function ensureResumeIdUtil(
+  selectedTemplateId: number | null,
+  resumeId: string | null,
+  setResumeId: (id: string | null) => void
+): Promise<string | null> {
+  if (resumeId) return resumeId;
+  const payload: SaveResumePayload = {
+    templateId: selectedTemplateId ?? null,
+    title: "My Resume",
+    sections: {} as any,
+  };
+  const res = await saveResume(payload, null);
+  const savedId = (res as any)?.id || (res as any)?.new_resume_id || null;
+  if (savedId) setResumeId(savedId);
+  return savedId;
+}
+
+/* ---------- Component ---------- */
 export default function ResumeEditor({
   sections,
   setSections,
@@ -347,7 +517,6 @@ export default function ResumeEditor({
   const [exportFormat, setExportFormat] = useState<"txt" | "pdf" | "doc">(
     "txt"
   );
-  const [canExportPreview, setCanExportPreview] = useState<boolean>(!!resumeId);
 
   const [enabledSections, setEnabledSections] = useState<
     Record<string, boolean>
@@ -357,18 +526,22 @@ export default function ResumeEditor({
 
   const [target, setTarget] = useState<string | undefined>(targetBadge);
   const [country, setCountry] = useState<string | undefined>(countryBadge);
-
-  // Load existing resume or prefill
+  const baselineRef = React.useRef<SectionsShape | null>(null);
   useEffect(() => {
     let canceled = false;
-
     async function run() {
       try {
         if (resumeId) {
           const data = await getResume(resumeId);
           if (canceled) return;
-          const merged = mergeFromApiSections(initialSections, data?.sections);
+
+          // ⬅️ به‌جای initialSections از baseline استفاده کن
+          const base = baselineRef.current ?? initialSections;
+          const merged = mergeFromApiSections(base, data?.sections);
+
           setSections(merged);
+          // ⬅️ baseline را هم آپدیت کن تا دفعه‌های بعدی هم همین رفتار حفظ شود
+          baselineRef.current = merged;
 
           const ctx = data?.context || {};
           if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
@@ -376,8 +549,12 @@ export default function ResumeEditor({
         } else {
           const data = await prefillResume();
           if (canceled) return;
+
           const merged = mergeFromApiSections(initialSections, data?.sections);
           setSections(merged);
+
+          // ⬅️ اولین بار baseline از روی prefill پر می‌شود
+          baselineRef.current = merged;
 
           const ctx = data?.context || {};
           if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
@@ -392,7 +569,6 @@ export default function ResumeEditor({
         });
       }
     }
-
     run();
     return () => {
       canceled = true;
@@ -433,24 +609,6 @@ export default function ResumeEditor({
       },
     }));
   };
-  function normalizeSectionsForSave(input: SectionsShape): SectionsShape {
-    const out: SectionsShape = {};
-    for (const [k, v] of Object.entries(input)) {
-      const title = (v as any).title;
-      const content = (v as any).content;
-
-      if (k === PERSONAL_KEY && content && typeof content === "object") {
-        // PERSONAL به رشته
-        out[k] = {
-          title,
-          content: personalToMultiline(content as PersonalData),
-        };
-      } else {
-        out[k] = { title, content };
-      }
-    }
-    return out;
-  }
 
   async function handleSaveSection(sectionKey: string) {
     try {
@@ -465,15 +623,20 @@ export default function ResumeEditor({
         title: (initialSections[sectionKey] as any).title,
         content: "",
       };
-      const normalizedOne = normalizeSectionsForSave({ [sectionKey]: one });
+      const cleaned = cleanOneSectionForSave(sectionKey, one);
       const payload: SaveResumePayload = {
-        templateId: selectedTemplateId ?? 0,
+        templateId: selectedTemplateId ?? null,
         title: "My Resume",
-        sections: normalizedOne as any,
+        sections: { [sectionKey]: cleaned } as any, // ← فقط همین سکشن
       };
-      const res = await saveResume(payload, resumeId ?? null);
+      const ensuredId = await ensureResumeIdUtil(
+        selectedTemplateId,
+        resumeId,
+        setResumeId
+      );
+      const res = await saveResume(payload, ensuredId ?? null);
       const savedId =
-        (res as any)?.id || (res as any)?.new_resume_id || resumeId || null;
+        (res as any)?.id || (res as any)?.new_resume_id || ensuredId || null;
       if (savedId && !resumeId) setResumeId(savedId);
 
       toast({ title: "Saved", description: `Section "${sectionKey}" saved.` });
@@ -489,7 +652,6 @@ export default function ResumeEditor({
   function handleReset() {
     const cleared: SectionsShape = Object.keys(initialSections).reduce(
       (acc, key) => {
-        // ریست: متن پیش‌فرض برگردد تا دوباره داخل textarea بنشیند
         acc[key] = {
           title: (initialSections[key] as any).title,
           content:
@@ -505,7 +667,6 @@ export default function ResumeEditor({
   }
 
   function buildPayload(): SaveResumePayload {
-    // ابتدا فقط سکشن‌های روشن را جمع می‌کنیم
     const raw: SectionsShape = Object.keys(initialSections).reduce(
       (acc, key) => {
         if (!sectionIsEnabled(key)) return acc;
@@ -521,10 +682,7 @@ export default function ResumeEditor({
       },
       {} as SectionsShape
     );
-
-    // سپس نرمال‌سازی (تبدیل personal به رشته)
-    const normalized = normalizeSectionsForSave(raw);
-
+    const normalized = normalizeSectionsForSave(raw, initialSections);
     return {
       templateId: selectedTemplateId ?? null,
       title: "My Resume",
@@ -534,11 +692,15 @@ export default function ResumeEditor({
 
   async function handleSaveAndCreate() {
     try {
-      const res = await saveResume(buildPayload(), resumeId ?? null);
+      const ensuredId = await ensureResumeIdUtil(
+        selectedTemplateId,
+        resumeId,
+        setResumeId
+      );
+      const res = await saveResume(buildPayload(), ensuredId ?? null);
       const savedId =
-        (res as any)?.id || (res as any)?.new_resume_id || resumeId || null;
+        (res as any)?.id || (res as any)?.new_resume_id || ensuredId || null;
       if (savedId) setResumeId(savedId);
-      setCanExportPreview(true);
       toast({
         title: "Saved",
         description: "Resume saved to My Documents → Resumes.",
@@ -574,17 +736,13 @@ export default function ResumeEditor({
   }
 
   async function ensureSavedThenExport() {
-    // فقط وقتی Preview/Export مجاز است اجازه بده، و هرگز خودش ذخیره نکند
-    if (!canExportPreview || !resumeId) {
-      toast({
-        title: "Not ready",
-        description: "First, use Save & Create to finalize your resume.",
-      });
-      return;
-    }
-
-    const apiFormat = exportFormat === "doc" ? "docx" : exportFormat;
     try {
+      const ensuredId = await ensureResumeIdUtil(
+        selectedTemplateId,
+        resumeId,
+        setResumeId
+      );
+      const apiFormat = exportFormat === "doc" ? "docx" : exportFormat;
       if (apiFormat === "txt") {
         const blob = toTxtBlob();
         const url = URL.createObjectURL(blob);
@@ -595,7 +753,7 @@ export default function ResumeEditor({
         URL.revokeObjectURL(url);
       } else {
         const blob = await exportResume({
-          resumeId: resumeId!,
+          resumeId: (ensuredId ?? resumeId)!,
           templateId: selectedTemplateId ?? undefined,
           format: apiFormat as "pdf" | "docx" | "txt",
         });
@@ -615,28 +773,63 @@ export default function ResumeEditor({
     }
   }
 
-  function openPreview() {
-    if (!resumeId || !canExportPreview) return;
-    const t = selectedTemplateId ?? undefined;
-    navigate(
-      `/dashboard/resume/preview/${resumeId}${t ? `?templateId=${t}` : ""}`
-    );
+  async function openPreview() {
+    try {
+      const ensuredId = await ensureResumeIdUtil(
+        selectedTemplateId,
+        resumeId,
+        setResumeId
+      );
+      const t = selectedTemplateId ?? undefined;
+      navigate(
+        `/dashboard/resume/preview/${ensuredId || resumeId}${
+          t ? `?templateId=${t}` : ""
+        }`
+      );
+    } catch {
+      toast({
+        title: "Preview error",
+        description: "Could not open preview.",
+        variant: "destructive",
+      });
+    }
   }
 
-  // ---- Small helpers ----
-  const LineText = (props: {
+  /* ---------- Small UI helpers (Input-row) ---------- */
+  const Row = ({
+    label,
+    children,
+  }: {
+    label: string;
+    children: React.ReactNode;
+  }) => (
+    <div className="grid grid-cols-12 gap-2 items-center">
+      <div className="col-span-4 text-xs md:text-sm text-gray-500 dark:text-gray-400">
+        {label}
+      </div>
+      <div className="col-span-8">{children}</div>
+    </div>
+  );
+
+  const LineInput = ({
+    value,
+    onChange,
+    placeholder,
+    type = "text",
+  }: {
     value: string;
     onChange: (v: string) => void;
     placeholder: string;
+    type?: string;
   }) => (
-    <Textarea
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      placeholder={props.placeholder}
-      className="min-h-10 text-[13px] md:text-sm bg-white text-gray-900 border border-gray-300
-             focus-visible:ring-1 focus-visible:ring-gray-400
-             dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700
-             dark:focus-visible:ring-gray-600"
+    <Input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="h-9 text-[13px] md:text-sm bg-white text-gray-900 border-gray-300
+      focus-visible:ring-1 focus-visible:ring-gray-400
+      dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:focus-visible:ring-gray-600"
     />
   );
 
@@ -651,8 +844,9 @@ export default function ResumeEditor({
     </div>
   );
 
-  // ---- Renderers ----
-  // Personal (ساختاری، بدون Add New)
+  /* ---------- Renderers (INLINE editors) ---------- */
+
+  // Personal
   const renderPersonal = (sectionKey: string, data?: PersonalData) => {
     const defaults = defaultPersonalFromInitial(initialSections);
     const model: PersonalData = {
@@ -668,51 +862,90 @@ export default function ResumeEditor({
     const previewText = [
       model.fullName,
       model.headline,
-      model.phone ? `Phone: ${model.phone}` : "",
       model.email ? `Email: ${model.email}` : "",
+      model.phone ? `Phone: ${model.phone}` : "",
       model.linkedin ? `LinkedIn: ${model.linkedin}` : "",
     ]
       .filter(Boolean)
       .join("\n");
-
     const wordCount = previewText.split(/\s+/).filter(Boolean).length;
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-        <div className="space-y-2">
-          <LineText
-            value={model.fullName}
-            onChange={(v) => set({ fullName: v })}
-            placeholder="Full Name"
-          />
-          <LineText
-            value={model.headline}
-            onChange={(v) => set({ headline: v })}
-            placeholder="Headline / Title"
-          />
-          <LineText
-            value={model.phone}
-            onChange={(v) => set({ phone: v })}
-            placeholder="Phone"
-          />
-          <LineText
-            value={model.email}
-            onChange={(v) => set({ email: v })}
-            placeholder="Email"
-          />
-          <LineText
-            value={model.linkedin}
-            onChange={(v) => set({ linkedin: v })}
-            placeholder="LinkedIn"
-          />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
+        <div className="md:w-full md:h-56 p-2 border rounded-md">
+          <div className="space-y-4 ">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Full Name:
+              </label>
+              <input
+                value={model.fullName}
+                onChange={(e) => set({ fullName: e.target.value })}
+                placeholder="Your full name"
+                className="w-full bg-transparent border-0  
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-between">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">
+                  Headline / Title:
+                </label>
+                <input
+                  value={model.headline}
+                  onChange={(e) => set({ headline: e.target.value })}
+                  placeholder="e.g., Computer Science PhD Candidate"
+                  className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                />
+              </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">
+                  Email:
+                </label>
+                <input
+                  type="email"
+                  value={model.email}
+                  onChange={(e) => set({ email: e.target.value })}
+                  placeholder="e.g., you@example.com"
+                  className="w-full bg-transparent border-0  
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex justify-between">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">
+                  Phone:
+                </label>
+                <input
+                  value={model.phone}
+                  onChange={(e) => set({ phone: e.target.value })}
+                  placeholder="e.g., +1 (555) 123-4567"
+                  className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">
+                  LinkedIn:
+                </label>
+                <input
+                  value={model.linkedin}
+                  onChange={(e) => set({ linkedin: e.target.value })}
+                  placeholder="e.g., linkedin.com/in/username"
+                  className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
         <div>
           <div className="mb-2">
-            <span
-              className="text-[12px] md:text-sm font-medium"
-              style={{ color: "#9ca3af" }}
-            >
+            <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
               Preview
             </span>
           </div>
@@ -727,10 +960,7 @@ export default function ResumeEditor({
               <Save className="w-3 h-3 mr-1" />
               Save
             </Button>
-            <span
-              className="text-[12px] md:text-xs"
-              style={{ color: "#9ca3af" }}
-            >
+            <span className="text-[12px] md:text-xs text-gray-500 dark:text-gray-400">
               Word ~ {wordCount}
             </span>
           </div>
@@ -739,7 +969,7 @@ export default function ResumeEditor({
     );
   };
 
-  // Generic item list renderer with custom defaults
+  // Reusable ItemList (Research Interests / Hobbies / Publications)
   const renderItemList = (
     sectionKey: string,
     data: ItemListData | undefined,
@@ -754,46 +984,69 @@ export default function ResumeEditor({
       set({ items: model.items.filter((_, j) => j !== i) });
     const edit = (i: number, v: string) =>
       set({ items: model.items.map((t, j) => (j === i ? v : t)) });
+
     const preview = model.items.map((t) => `• ${t}`).join("\n");
     const words = preview.split(/\s+/).filter(Boolean).length;
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-        <div className="space-y-2">
-          {model.items.map((t, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <LineText
-                value={t}
-                onChange={(v) => edit(i, v)}
-                placeholder={`${label} #${i + 1}`}
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => del(i)}
-                title="Delete item"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            className="h-8 px-2.5 text-xs"
-            onClick={add}
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Add New
-          </Button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="md:w-ful md:h-56 p-2 border rounded-md overflow-y-auto">
+          <div className="space-y-4">
+            {model.items.map((t, i) => {
+              const id = `${label.toLowerCase()}-${i}`;
+              const placeholder =
+                label === "Publication"
+                  ? "e.g., Smith, J. (2024). Title… Journal, 12(3), 45–60."
+                  : label === "Interest"
+                  ? "e.g., Machine Learning for Healthcare"
+                  : "e.g., Competitive Programming";
 
+              return (
+                <div key={i} className="w-full">
+                  <label
+                    htmlFor={id}
+                    className="block text-sm font-medium text-gray-500 mb-1"
+                  >
+                    #{i + 1} {label}
+                  </label>
+
+                  <div className="flex gap-2 w-full">
+                    <input
+                      id={id}
+                      value={t}
+                      onChange={(e) => edit(i, e.target.value)}
+                      placeholder={placeholder}
+                      className="w-full bg-transparent border-0 
+                       focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                    />
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => del(i)}
+                      title="Delete item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <Button
+              variant="outline"
+              className="h-8 px-2.5 text-xs"
+              onClick={add}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Item
+            </Button>
+          </div>
+        </div>
         <div>
           <div className="mb-2">
-            <span
-              className="text-[12px] md:text-sm font-medium"
-              style={{ color: "#9ca3af" }}
-            >
+            <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
               Preview
             </span>
           </div>
@@ -808,10 +1061,7 @@ export default function ResumeEditor({
               <Save className="w-3 h-3 mr-1" />
               Save
             </Button>
-            <span
-              className="text-[12px] md:text-xs"
-              style={{ color: "#9ca3af" }}
-            >
+            <span className="text-[12px] md:text-xs text-gray-500 dark:text-gray-400">
               Word ~ {words}
             </span>
           </div>
@@ -820,7 +1070,7 @@ export default function ResumeEditor({
     );
   };
 
-  // Experience
+  // Experience (Blocks)
   const renderExperience = (sectionKey: string, data?: ExperienceData) => {
     const xp: ExperienceData =
       data && Array.isArray(data.blocks) ? data : DEFAULT_XP;
@@ -880,89 +1130,136 @@ export default function ResumeEditor({
         return `${header}\n${bullets}`;
       })
       .join("\n\n");
-
     const wordCount = previewText.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {xp.blocks.map((b, bi) => (
-          <div
-            key={bi}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.role}
-                  onChange={(v) => editBlock(bi, { role: v })}
-                  placeholder="Role / Position"
-                />
+          <div key={bi} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-ful md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Role / Position */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Role / Position
+                  </label>
+                  <input
+                    value={b.role}
+                    onChange={(e) => editBlock(bi, { role: e.target.value })}
+                    placeholder="e.g., Research Assistant"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Organization / University */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">
+                    Organization / University
+                  </label>
+                  <input
+                    value={b.organization}
+                    onChange={(e) =>
+                      editBlock(bi, { organization: e.target.value })
+                    }
+                    placeholder="e.g., Tech University"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Location
+                  </label>
+                  <input
+                    value={b.location ?? ""}
+                    onChange={(e) =>
+                      editBlock(bi, { location: e.target.value })
+                    }
+                    placeholder="e.g., Boston, MA"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Start / End (LineInput باقی بماند) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Start
+                    </label>
+                    <LineInput
+                      value={b.startDate ?? ""}
+                      onChange={(v) => editBlock(bi, { startDate: v })}
+                      placeholder="e.g., Sep 2021"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      End
+                    </label>
+                    <LineInput
+                      value={b.endDate ?? ""}
+                      onChange={(v) => editBlock(bi, { endDate: v })}
+                      placeholder="e.g., Present"
+                    />
+                  </div>
+                </div>
+
+                {/* Bullets */}
+                {b.bullets.map((t, idx) => (
+                  <div key={idx}>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Bullet #{idx + 1}
+                    </label>
+                    <div className="flex gap-2 w-full">
+                      <input
+                        value={t}
+                        onChange={(e) => editBullet(bi, idx, e.target.value)}
+                        placeholder="e.g., Improved X by Y%"
+                        className="w-full bg-transparent border-0 
+                     focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        onClick={() => delBullet(bi, idx)}
+                        title="Delete bullet"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
                 <Button
                   variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(bi)}
-                  title="Delete"
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => addBullet(bi)}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Item
                 </Button>
-              </div>
-              <LineText
-                value={b.organization}
-                onChange={(v) => editBlock(bi, { organization: v })}
-                placeholder="Organization / University"
-              />
-              <LineText
-                value={b.location ?? ""}
-                onChange={(v) => editBlock(bi, { location: v })}
-                placeholder="City, Country"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <LineText
-                  value={b.startDate ?? ""}
-                  onChange={(v) => editBlock(bi, { startDate: v })}
-                  placeholder="Start"
-                />
-                <LineText
-                  value={b.endDate ?? ""}
-                  onChange={(v) => editBlock(bi, { endDate: v })}
-                  placeholder="End"
-                />
-              </div>
-              {b.bullets.map((t, idx) => (
-                <div key={idx} className="flex items-start gap-2">
-                  <LineText
-                    value={t}
-                    onChange={(v) => editBullet(bi, idx, v)}
-                    placeholder={`Bullet #${idx + 1}`}
-                  />
+
+                <div className="flex justify-end">
                   <Button
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => delBullet(bi, idx)}
-                    title="Delete"
+                    onClick={() => delBlock(bi)}
+                    title="Delete block"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-              ))}
-              <Button
-                variant="outline"
-                className="h-8 px-2.5 text-xs"
-                onClick={() => addBullet(bi)}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Item
-              </Button>
+              </div>
             </div>
-
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -977,7 +1274,7 @@ export default function ResumeEditor({
                   <div key={idx}>• {t}</div>
                 ))}
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -987,6 +1284,9 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {wordCount}
+                </div>
               </div>
             </div>
           </div>
@@ -999,14 +1299,11 @@ export default function ResumeEditor({
           <Plus className="w-4 h-4 mr-1" />
           Add New
         </Button>
-        <div className="text-right text-[12px]" style={{ color: "#9ca3af" }}>
-          Word ~ {wordCount}
-        </div>
       </div>
     );
   };
 
-  // Education
+  // Education (Blocks)
   const renderEducation = (sectionKey: string, data?: EducationData) => {
     const edu: EducationData =
       data && Array.isArray(data.blocks) ? data : DEFAULT_EDU;
@@ -1020,60 +1317,109 @@ export default function ResumeEditor({
       set({
         blocks: edu.blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)),
       });
+    const eduPreview = edu.blocks
+      .map(
+        (b) =>
+          `${b.title}\n${b.start ?? ""} - ${b.end ?? ""}\n${b.university}\n${
+            b.description ?? ""
+          }`
+      )
+      .join("\n\n");
+    const eduWords = eduPreview.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {edu.blocks.map((b, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.title}
-                  onChange={(v) => editBlock(i, { title: v })}
-                  placeholder="Degree / Program title"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(i)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-              <LineText
-                value={b.university}
-                onChange={(v) => editBlock(i, { university: v })}
-                placeholder="University"
-              />
-              <LineText
-                value={b.description ?? ""}
-                onChange={(v) => editBlock(i, { description: v })}
-                placeholder='Dissertation / Description (e.g., "AI Algorithms ...")'
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <LineText
-                  value={b.start ?? ""}
-                  onChange={(v) => editBlock(i, { start: v })}
-                  placeholder="Start year (e.g., 2020)"
-                />
-                <LineText
-                  value={b.end ?? ""}
-                  onChange={(v) => editBlock(i, { end: v })}
-                  placeholder="End year (e.g., 2024)"
-                />
+          <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-ful md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Degree / Program title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Degree / Program title
+                  </label>
+                  <input
+                    value={b.title}
+                    onChange={(e) => editBlock(i, { title: e.target.value })}
+                    placeholder="e.g., PhD in Computer Science"
+                    className="w-full bg-transparent border-0  
+                       focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* University */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    University
+                  </label>
+                  <input
+                    value={b.university}
+                    onChange={(e) =>
+                      editBlock(i, { university: e.target.value })
+                    }
+                    placeholder="e.g., MIT"
+                    className="w-full bg-transparent border-0 
+                       focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Dissertation / Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Dissertation / Description
+                  </label>
+                  <input
+                    value={b.description ?? ""}
+                    onChange={(e) =>
+                      editBlock(i, { description: e.target.value })
+                    }
+                    placeholder="e.g., “AI Algorithms for …”"
+                    className="w-full bg-transparent border-0 
+                       focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Start / End years */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Start year
+                    </label>
+                    <LineInput
+                      value={b.start ?? ""}
+                      onChange={(v) => editBlock(i, { start: v })}
+                      placeholder="e.g., 2020"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      End year
+                    </label>
+                    <LineInput
+                      value={b.end ?? ""}
+                      onChange={(v) => editBlock(i, { end: v })}
+                      placeholder="e.g., 2024"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => delBlock(i)}
+                    title="Delete education block"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
-
+            {/* Preview (راست) */}
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -1085,7 +1431,7 @@ export default function ResumeEditor({
                 <div>{b.university}</div>
                 <div>{b.description}</div>
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -1095,10 +1441,14 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {eduWords}
+                </div>
               </div>
             </div>
           </div>
         ))}
+
         <Button
           variant="outline"
           className="h-8 px-2.5 text-xs"
@@ -1114,6 +1464,7 @@ export default function ResumeEditor({
   const renderPublications = (sectionKey: string, data?: ItemListData) =>
     renderItemList(sectionKey, data, "Publication", DEFAULT_PUB_ITEMS);
 
+  // Certifications & Skills
   const renderCertSkills = (sectionKey: string, data?: CertData) => {
     const model: CertData =
       data && Array.isArray(data.blocks) ? data : DEFAULT_CERT;
@@ -1148,63 +1499,86 @@ export default function ResumeEditor({
             : b
         ),
       });
+    const certPreview = model.blocks
+      .map((b) =>
+        [b.header, ...(b.skills || []).map((s) => `• ${s}`)].join("\n")
+      )
+      .join("\n\n");
+    const certWords = certPreview.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {model.blocks.map((b, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.header}
-                  onChange={(v) => editBlock(i, { header: v })}
-                  placeholder="Certification header"
-                />
+          <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-full  md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Certification header */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Certification header
+                  </label>
+                  <input
+                    value={b.header}
+                    onChange={(e) => editBlock(i, { header: e.target.value })}
+                    placeholder="e.g., CISSP (ISC) — Apr 2023"
+                    className="w-full bg-transparent border-0 
+                       focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Skills */}
+                {b.skills.map((t, k) => (
+                  <div key={k} className="w-full">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Skill #{k + 1}
+                    </label>
+                    <div className="flex gap-2 w-full">
+                      <input
+                        value={t}
+                        onChange={(e) => editItem(i, k, e.target.value)}
+                        placeholder="e.g., Python, TensorFlow, C++"
+                        className="w-full bg-transparent border-0 
+                           focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => delItem(i, k)}
+                        title="Delete skill"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
                 <Button
                   variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(i)}
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => addItem(i)}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Item
                 </Button>
-              </div>
-              {b.skills.map((t, k) => (
-                <div key={k} className="flex items-start gap-2">
-                  <LineText
-                    value={t}
-                    onChange={(v) => editItem(i, k, v)}
-                    placeholder={`Skill #${k + 1}`}
-                  />
+
+                <div className="flex justify-end">
                   <Button
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => delItem(i, k)}
+                    onClick={() => delBlock(i)}
+                    title="Delete certification block"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-              ))}
-              <Button
-                variant="outline"
-                className="h-8 px-2.5 text-xs"
-                onClick={() => addItem(i)}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Item
-              </Button>
+              </div>
             </div>
-
+            {/* Preview (راست) */}
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -1214,7 +1588,7 @@ export default function ResumeEditor({
                   <div key={k}>• {t}</div>
                 ))}
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -1224,10 +1598,14 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {certWords}
+                </div>
               </div>
             </div>
           </div>
         ))}
+
         <Button
           variant="outline"
           className="h-8 px-2.5 text-xs"
@@ -1253,43 +1631,63 @@ export default function ResumeEditor({
       set({
         blocks: model.blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)),
       });
+    const awardsPreview = model.blocks
+      .map((b) => `${b.title}\n${b.orgAndDate}`)
+      .join("\n\n");
+    const awardsWords = awardsPreview.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {model.blocks.map((b, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.title}
-                  onChange={(v) => editBlock(i, { title: v })}
-                  placeholder="Award title"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(i)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-              <LineText
-                value={b.orgAndDate}
-                onChange={(v) => editBlock(i, { orgAndDate: v })}
-                placeholder="Organization , Date"
-              />
-            </div>
+          <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-full  md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Award title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Award title
+                  </label>
+                  <input
+                    value={b.title}
+                    onChange={(e) => editBlock(i, { title: e.target.value })}
+                    placeholder="e.g., Outstanding Thesis Award"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
 
+                {/* Organization , Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Organization , Date
+                  </label>
+                  <input
+                    value={b.orgAndDate}
+                    onChange={(e) =>
+                      editBlock(i, { orgAndDate: e.target.value })
+                    }
+                    placeholder="e.g., Tech University, May 2024"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => delBlock(i)}
+                    title="Delete award block"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -1297,7 +1695,7 @@ export default function ResumeEditor({
                 <div className="font-semibold">{b.title}</div>
                 <div>{b.orgAndDate}</div>
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -1307,6 +1705,9 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {awardsWords}
+                </div>
               </div>
             </div>
           </div>
@@ -1337,43 +1738,63 @@ export default function ResumeEditor({
       set({
         blocks: model.blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)),
       });
+    const memPreview = model.blocks
+      .map((b) => `${b.organization}\n${b.date}`)
+      .join("\n\n");
+    const memWords = memPreview.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {model.blocks.map((b, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.organization}
-                  onChange={(v) => editBlock(i, { organization: v })}
-                  placeholder="Organization"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(i)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-              <LineText
-                value={b.date}
-                onChange={(v) => editBlock(i, { date: v })}
-                placeholder="Date (e.g., September 2022 – Present)"
-              />
-            </div>
+          <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-full md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Organization */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Organization
+                  </label>
+                  <input
+                    value={b.organization}
+                    onChange={(e) =>
+                      editBlock(i, { organization: e.target.value })
+                    }
+                    placeholder="e.g., IEEE"
+                    className="w-full bg-transparent border-0
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
 
+                {/* Date (LineInput باقی بماند) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Date
+                  </label>
+                  <input
+                    value={b.date}
+                    onChange={(e) => editBlock(i, { date: e.target.value })}
+                    placeholder="e.g., Sep 2022 – Present"
+                    className="w-full bg-transparent border-0  
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => delBlock(i)}
+                    title="Delete membership block"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -1381,7 +1802,7 @@ export default function ResumeEditor({
                 <div className="font-semibold">{b.organization}</div>
                 <div>{b.date}</div>
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -1391,6 +1812,9 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {memWords}
+                </div>
               </div>
             </div>
           </div>
@@ -1407,7 +1831,6 @@ export default function ResumeEditor({
     );
   };
 
-  // References
   const renderReferences = (sectionKey: string, data?: ReferenceData) => {
     const model: ReferenceData =
       data && Array.isArray(data.blocks) ? data : DEFAULT_REFS;
@@ -1421,48 +1844,77 @@ export default function ResumeEditor({
       set({
         blocks: model.blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)),
       });
+    const refPreview = model.blocks
+      .map((b) => `${b.nameTitle}\n${b.place}\n${b.contact}`)
+      .join("\n\n");
+    const refWords = refPreview.split(/\s+/).filter(Boolean).length;
 
     return (
       <div className="space-y-6">
         {model.blocks.map((b, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <LineText
-                  value={b.nameTitle}
-                  onChange={(v) => editBlock(i, { nameTitle: v })}
-                  placeholder="Name - Title"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => delBlock(i)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-              <LineText
-                value={b.place}
-                onChange={(v) => editBlock(i, { place: v })}
-                placeholder="Place / Department"
-              />
-              <LineText
-                value={b.contact}
-                onChange={(v) => editBlock(i, { contact: v })}
-                placeholder="Tel - Email"
-              />
-            </div>
+          <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:w-fuul md:h-56 p-2 border rounded-md overflow-y-auto">
+              <div className="space-y-4">
+                {/* Name – Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Name – Title:
+                  </label>
+                  <input
+                    value={b.nameTitle}
+                    onChange={(e) =>
+                      editBlock(i, { nameTitle: e.target.value })
+                    }
+                    placeholder="e.g., Dr. Sarah Thompson — Associate Professor"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
 
+                {/* Place / Department */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Place / Department:
+                  </label>
+                  <input
+                    value={b.place}
+                    onChange={(e) => editBlock(i, { place: e.target.value })}
+                    placeholder="e.g., Dept. of CS, MIT"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Tel – Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Tel – Email:
+                  </label>
+                  <input
+                    value={b.contact}
+                    onChange={(e) => editBlock(i, { contact: e.target.value })}
+                    placeholder="e.g., +1 (617) 253-1234 — sarah@mit.edu"
+                    className="w-full bg-transparent border-0 
+                 focus:ring-0 focus:outline-none rounded-none px-0 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => delBlock(i)}
+                    title="Delete reference block"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Preview
                 </span>
               </div>
@@ -1471,7 +1923,7 @@ export default function ResumeEditor({
                 <div>{b.place}</div>
                 <div>{b.contact}</div>
               </SectionPreviewShell>
-              <div className="flex items-center justify-end mt-2">
+              <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
                   className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
@@ -1481,6 +1933,9 @@ export default function ResumeEditor({
                   <Save className="w-3 h-3 mr-1" />
                   Save
                 </Button>
+                <div className="text-right text-[12px] text-gray-500 dark:text-gray-400">
+                  Word ~ {refWords}
+                </div>
               </div>
             </div>
           </div>
@@ -1497,37 +1952,31 @@ export default function ResumeEditor({
     );
   };
 
-  // ---- UI ----
+  /* ---------- UI ---------- */
   return (
     <div
       className="rounded-xl border flex flex-col h-full min-h-0 overflow-hidden bg-white text-gray-900 border-gray-200
              dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700"
     >
       {/* Header */}
-      <div
-        className="p-4 border-b shrink-0 bg-white border-gray-200
-                dark:bg-gray-900 dark:border-gray-700"
-      >
+      <div className="p-4 border-b shrink-0 bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
               variant="outline"
-              className="bg-gray-100 text-gray-900 border-gray-300
-             dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
+              className="bg-gray-100 text-gray-900 border-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
             >
               Target: {target ?? "—"}
             </Badge>
             <Badge
               variant="outline"
-              className="bg-gray-100 text-gray-900 border-gray-300
-             dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
+              className="bg-gray-100 text-gray-900 border-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
             >
               Country: {country ?? "—"}
             </Badge>
             <Badge
               variant="outline"
-              className="bg-gray-100 text-gray-900 border-gray-300
-             dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
+              className="bg-gray-100 text-gray-900 border-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
             >
               Words ~ {totalWords}
             </Badge>
@@ -1538,58 +1987,30 @@ export default function ResumeEditor({
               size="sm"
               variant="outline"
               onClick={handleReset}
-              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm bg-white text-gray-700 border-gray-300
-             hover:bg-gray-50
-             dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
             >
               <RotateCcw className="w-4 h-4 mr-1" />
               Reset
             </Button>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={openPreview}
-                      disabled={!canExportPreview || !resumeId}
-                      className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm disabled:opacity-60 bg-white text-gray-700 border-gray-300
-             hover:bg-gray-50
-             dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
-                    >
-                      Preview
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {(!canExportPreview || !resumeId) && (
-                  <TooltipContent>First, create and save</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            {/* همیشه فعال */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openPreview}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
+            >
+              Preview
+            </Button>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      size="sm"
-                      onClick={() => setExportOpen(true)}
-                      disabled={!canExportPreview || !resumeId}
-                      className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm disabled:opacity-60 bg-purple-600 hover:bg-purple-700 text-white
-             dark:bg-purple-600 dark:hover:bg-purple-700"
-                    >
-                      <Download className="w-4 h-4 mr-1" />
-                      Export
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {(!canExportPreview || !resumeId) && (
-                  <TooltipContent>First, create and save</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              size="sm"
+              onClick={() => setExportOpen(true)}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Export
+            </Button>
 
             <Button
               size="sm"
@@ -1622,8 +2043,7 @@ export default function ResumeEditor({
           return (
             <div
               key={sectionKey}
-              className="p-4 rounded-xl border bg-white border-gray-200
-             dark:bg-gray-900 dark:border-gray-700"
+              className="p-4 rounded-xl border bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700"
             >
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -1678,6 +2098,7 @@ export default function ResumeEditor({
                   {sectionKey === STRUCTURED_KEYS.refs &&
                     renderReferences(sectionKey, content as ReferenceData)}
 
+                  {/* Summary و سایر متن‌های ساده (Summary باید Textarea بماند) */}
                   {sectionKey !== PERSONAL_KEY &&
                     sectionKey !== STRUCTURED_KEYS.interests &&
                     sectionKey !== STRUCTURED_KEYS.hobbies &&
@@ -1688,7 +2109,7 @@ export default function ResumeEditor({
                     sectionKey !== STRUCTURED_KEYS.awards &&
                     sectionKey !== STRUCTURED_KEYS.memberships &&
                     sectionKey !== STRUCTURED_KEYS.refs && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Textarea
                             value={typeof content === "string" ? content : ""}
@@ -1699,10 +2120,7 @@ export default function ResumeEditor({
                               (initialSections[sectionKey] as any)?.content ||
                               sTitle
                             }
-                            className="min-h-28 md:min-h-32 text-[13px] md:text-sm bg-white text-gray-900 border border-gray-300
-             focus-visible:ring-1 focus-visible:ring-gray-400
-             dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700
-             dark:focus-visible:ring-gray-600"
+                            className="min-h-28 md:min-h-32 text-[13px] md:text-sm bg-white text-gray-900 border border-gray-300 focus-visible:ring-1 focus-visible:ring-gray-400 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:focus-visible:ring-gray-600"
                           />
                         </div>
                         <div>
@@ -1773,7 +2191,6 @@ export default function ResumeEditor({
                 await ensureSavedThenExport();
                 setExportOpen(false);
               }}
-              disabled={!canExportPreview || !resumeId}
             >
               Download
             </Button>

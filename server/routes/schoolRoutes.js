@@ -240,10 +240,21 @@ router.get("/schools", authenticateToken, async (req, res) => {
 
     let whereClauses = ["s.status = 'publish'"];
     const params = [];
+    const ignoreDefaults = String(req.query.ignoreUserDefaults || "") === "1";
 
+    const has = (v) =>
+      typeof v !== "undefined" && v !== null && String(v) !== "";
     // ----- read filters -----
-    const filterCountry = req.query.country || userPreferences.country;
-    const filterDegreeLevel = req.query.degreeLevel || userPreferences.level;
+    const filterCountry = has(req.query.country)
+      ? req.query.country
+      : ignoreDefaults
+      ? null
+      : userPreferences.country;
+    const filterDegreeLevel = has(req.query.degreeLevel)
+      ? req.query.degreeLevel
+      : ignoreDefaults
+      ? null
+      : userPreferences.level;
     const filterSearch = (req.query.search || "").trim() || null;
     const filterOrderBy = (req.query.orderBy || "").trim() || null;
 

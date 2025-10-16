@@ -151,7 +151,7 @@ const DeadlineDropdown: React.FC<Props> = ({
               className={cn(
                 "flex items-center gap-2 text-center  truncate text-inherit w-full",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40 rounded-full",
-                "h-7 md:h-8 !py-0 px-3",
+                "h-7 md:h-fit !py-0 px-3",
                 buttonClassName
               )}
               title={

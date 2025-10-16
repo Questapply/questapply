@@ -1,4 +1,3 @@
-
 import React from "react";
 import { motion } from "framer-motion";
 import { TestTube } from "lucide-react";
@@ -37,7 +36,8 @@ const TestsHeader: React.FC<TestsHeaderProps> = ({ variants }) => {
         Standardized Test Scores
       </h1>
       <p className="mt-3 text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-        Many graduate programs require standardized test scores. Let us know which tests you've taken.
+        Many graduate programs require standardized test scores. Let us know
+        which tests you've taken.
       </p>
     </motion.div>
   );

@@ -4,10 +4,10 @@
 export type FilterSnapshot = {
   country?: string;
   state?: string[];
-  school?: string;
+  school?: string[];
   degreeLevel?: string;
-  areaOfStudy?: string[];
-  program?: string[];
+  areaOfStudy?: string;
+  program?: string;
   orderBy?: string;
   searchQuery?: string;
 };

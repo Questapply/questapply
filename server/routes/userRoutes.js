@@ -186,11 +186,12 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
     }
     const userId = users[0].ID;
 
-    // ----- Usermeta needed -----
+    // ----- Usermeta keys we need -----
     const keys = [
       "citizen",
       "country",
       "profile_education",
+      "profile_education_json", // ← جدید (JSON Array of blocks)
       "application_country",
       "application_level",
       "application_program",
@@ -253,56 +254,123 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
     const citizenshipCode = metaData.citizen || "";
     const residenceCode = metaData.country || "";
 
-    // ----- Education (PHP-serialized) -----
-    const educationData = { degree: "", university: "", major: "", gpa: "" };
-    if (metaData.profile_education) {
+    // ----- Education (اولویت با JSON جدید) -----
+    const eduJsonRaw = metaData.profile_education_json;
+    let educationData;
+
+    if (eduJsonRaw) {
       try {
-        const raw = metaData.profile_education.replace(/^s:\d+:"(.*)"$/, "$1");
-
-        // level
-        const levelMatch = raw.match(/s:5:"level";a:\d+:{(?:[^{}]|{[^{}]*})*}/);
-        if (levelMatch) {
-          const m = levelMatch[0].match(/i:0;s:\d+:"([^"]*)"/);
-          if (m && m[1]) {
-            let degree = m[1];
-            if (degree === "Master") degree = "Master's Degree";
-            else if (degree === "Bachelor") degree = "Bachelor's Degree";
-            else if (degree === "PhD" || degree === "Ph.D.")
-              degree = "Doctoral Degree";
-            educationData.degree = degree;
-          }
-        }
-
-        // university
-        const uniMatch = raw.match(
-          /s:10:"university";a:\d+:{(?:[^{}]|{[^{}]*})*}/
-        );
-        if (uniMatch) {
-          const m = uniMatch[0].match(/i:0;s:\d+:"([^"]*)"/);
-          if (m && m[1]) educationData.university = m[1];
-        }
-
-        // program (major)
-        const progMatch = raw.match(
-          /s:7:"program";a:\d+:{(?:[^{}]|{[^{}]*})*}/
-        );
-        if (progMatch) {
-          const m = progMatch[0].match(/i:0;s:\d+:"([^"]*)"/);
-          if (m && m[1]) educationData.major = m[1].trim();
-        }
-
-        // gpa
-        const gpaMatch = raw.match(/s:3:"gpa";a:\d+:{(?:[^{}]|{[^{}]*})*}/);
-        if (gpaMatch) {
-          const m = gpaMatch[0].match(/i:0;s:\d+:"([^"]*)"/);
-          if (m && m[1]) educationData.gpa = m[1];
-        }
-      } catch (e) {
-        console.error("Error parsing education data:", e);
+        const arr = JSON.parse(eduJsonRaw);
+        educationData = {
+          items: Array.isArray(arr)
+            ? arr.map((b) => ({
+                degree: b.degree || "",
+                university: b.university || "",
+                major: b.major || "",
+                gpa: b.gpa || "",
+                start: b.start || "",
+                end: b.end || "",
+              }))
+            : [
+                {
+                  degree: "",
+                  university: "",
+                  major: "",
+                  gpa: "",
+                  start: "",
+                  end: "",
+                },
+              ],
+        };
+      } catch {
+        educationData = {
+          items: [
+            {
+              degree: "",
+              university: "",
+              major: "",
+              gpa: "",
+              start: "",
+              end: "",
+            },
+          ],
+        };
       }
+    } else {
+      // ← فالبک به متای قدیمی (همان منطق قبلی + تلاش برای استخراج start/end)
+      const single = {
+        degree: "",
+        university: "",
+        major: "",
+        gpa: "",
+        start: "",
+        end: "",
+      };
+      if (metaData.profile_education) {
+        try {
+          const raw = metaData.profile_education.replace(
+            /^s:\d+:"(.*)"$/,
+            "$1"
+          );
+          const pick = (regex) => {
+            const m = raw.match(regex);
+            if (!m) return "";
+            const m2 = m[0].match(/i:0;s:\d+:"([^"]*)"/);
+            return (m2 && m2[1]) || "";
+          };
+
+          // degree
+          const levelMatch = raw.match(
+            /s:5:"level";a:\d+:{(?:[^{}]|{[^{}]*})*}/
+          );
+          if (levelMatch) {
+            const m = levelMatch[0].match(/i:0;s:\d+:"([^"]*)"/);
+            if (m && m[1]) {
+              let degree = m[1];
+              if (degree === "Master") degree = "Master's Degree";
+              else if (degree === "Bachelor") degree = "Bachelor's Degree";
+              else if (degree === "PhD" || degree === "Ph.D.")
+                degree = "Doctoral Degree";
+              single.degree = degree;
+            }
+          }
+
+          single.university = pick(
+            /s:10:"university";a:\d+:{(?:[^{}]|{[^{}]*})*}/
+          );
+          single.major = pick(/s:7:"program";a:\d+:{(?:[^{}]|{[^{}]*})*}/);
+          single.gpa = pick(/s:3:"gpa";a:\d+:{(?:[^{}]|{[^{}]*})*}/);
+
+          // start/end (اگر وجود داشت)
+          const startRaw = raw.match(
+            /s:10:"start_date";a:\d+:{(?:[^{}]|{[^{}]*})*}/
+          );
+          if (startRaw) {
+            const m = startRaw[0].match(/i:0;s:\d+:"([^"]*)"/);
+            if (m && m[1]) {
+              const y = (m[1] || "").slice(0, 4); // ← فقط سال
+              single.start = /^\d{4}$/.test(y) ? y : "";
+            }
+          }
+
+          const endRaw = raw.match(
+            /s:8:"end_date";a:\d+:{(?:[^{}]|{[^{}]*})*}/
+          );
+          if (endRaw) {
+            const m = endRaw[0].match(/i:0;s:\d+:"([^"]*)"/);
+            if (m && m[1]) {
+              const y = (m[1] || "").slice(0, 4); // ← فقط سال
+              single.end = /^\d{4}$/.test(y) ? y : "";
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing education data:", e);
+        }
+      }
+      educationData = { items: [single] };
     }
 
-    // ----- Destination (goals) -----
+    // ----- Goals / Destination -----
     const destinationData = {
       country: "",
       level: "",
@@ -314,7 +382,7 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       const countryId = metaData.application_country;
       destinationData.country = {
         id: countryId,
-        name: countryMap[countryId] || `Unknown (${countryId})`, // فرض بر این‌که countryMap در اسکوپ شما موجود است
+        name: countryMap[countryId] || `Unknown (${countryId})`,
       };
     }
 
@@ -334,22 +402,13 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
           [programId]
         );
         if (programRows && programRows.length > 0) {
-          destinationData.field = {
-            id: programId,
-            name: programRows[0].name,
-          };
+          destinationData.field = { id: programId, name: programRows[0].name };
         } else {
-          destinationData.field = {
-            id: programId,
-            name: "Selected Program",
-          };
+          destinationData.field = { id: programId, name: "Selected Program" };
         }
       } catch (e) {
         console.error("Error fetching program name:", e);
-        destinationData.field = {
-          id: programId,
-          name: "Selected Program",
-        };
+        destinationData.field = { id: programId, name: "Selected Program" };
       }
     }
 
@@ -406,9 +465,8 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       }
     }
 
-    // ----- Tests (with nested .scores shape for each test) -----
+    // ----- Tests (nested scores) -----
     const testsData = { type: "", scores: {} };
-
     const buildScores = (fieldToMetaKey) => {
       const out = {};
       for (const [field, key] of Object.entries(fieldToMetaKey)) {
@@ -418,7 +476,6 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       return out;
     };
 
-    // GRE
     const GRE = buildScores({
       total: "application_gre_total",
       verbal: "application_gre_verbal",
@@ -430,7 +487,6 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       if (!testsData.type) testsData.type = "gre";
     }
 
-    // GMAT
     const GMAT = buildScores({
       total: "application_gmat_total",
       verbal: "application_gmat_verbal",
@@ -442,16 +498,12 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       if (!testsData.type) testsData.type = "gmat";
     }
 
-    // LSAT
-    const LSAT = buildScores({
-      total: "application_lsat_total",
-    });
+    const LSAT = buildScores({ total: "application_lsat_total" });
     if (Object.keys(LSAT).length) {
       testsData.scores.lsat = { scores: LSAT };
       if (!testsData.type) testsData.type = "lsat";
     }
 
-    // SAT
     const SAT = buildScores({
       total: "application_sat_total",
       reading_writing: "application_sat_reading_writing",
@@ -462,10 +514,7 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
       if (!testsData.type) testsData.type = "sat";
     }
 
-    // ACT
-    const ACT = buildScores({
-      total: "application_act_total",
-    });
+    const ACT = buildScores({ total: "application_act_total" });
     if (Object.keys(ACT).length) {
       testsData.scores.act = { scores: ACT };
       if (!testsData.type) testsData.type = "act";
@@ -478,7 +527,7 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
           ? {
               code: citizenshipCode,
               name: countryCodeToName[citizenshipCode] || "",
-            } // فرض: countryCodeToName در اسکوپ شما موجود است
+            }
           : "",
         residence: residenceCode
           ? {
@@ -487,7 +536,7 @@ router.get("/profile-form", authenticateToken, async (req, res) => {
             }
           : "",
       },
-      education: educationData,
+      education: educationData, // ← حالا همیشه items دارد
       goals: destinationData,
       language: languageData,
       tests: testsData,
@@ -519,7 +568,7 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
     }
     const userId = users[0].ID;
 
-    // --- Small helpers ---
+    // --- Small helper ---
     const upsertMeta = async (key, value) => {
       const [rows] = await db.query(
         `SELECT umeta_id FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key = ?`,
@@ -555,7 +604,7 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
     };
 
     // -----------------------------
-    // Citizenship & Residence (codes)
+    // Citizenship & Residence
     // -----------------------------
     if (citizenship?.country?.code) {
       await upsertMeta("citizen", citizenship.country.code);
@@ -565,9 +614,54 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
     }
 
     // -----------------------------
-    // Education (WordPress PHP-serialized structure)
+    // Education (JSON + legacy serialize for first block)
     // -----------------------------
     if (education) {
+      // 1) JSON جدید
+      if (Array.isArray(education.items)) {
+        const cleanItems = education.items.map((b) => ({
+          degree: b.degree || "",
+          university: b.university || "",
+          major: b.major || "",
+          gpa: b.gpa || "",
+          start: b.start ?? b.startYear ?? "",
+          end: b.end ?? b.endYear ?? "",
+        }));
+        await upsertMeta("profile_education_json", JSON.stringify(cleanItems));
+      }
+
+      // 2) legacy: با اولین بلاک
+      const first =
+        Array.isArray(education.items) && education.items.length
+          ? education.items[0]
+          : education;
+
+      const normalizeDegree = (deg) => {
+        if (deg === "Master's Degree") return "Master";
+        if (deg === "Bachelor's Degree") return "Bachelor";
+        if (deg === "Doctoral Degree" || deg === "PhD" || deg === "Ph.D.")
+          return "Ph.D.";
+        return deg || "";
+      };
+
+      const degree = normalizeDegree(first.degree || education.degree);
+      const university = first.university || education.university || "";
+      const major = first.major || education.major || "";
+      const gpa = first.gpa || education.gpa || "";
+
+      // سال ورودی → "YYYY-01" برای متای قدیمی
+      const startYear = String(
+        first.start ??
+          first.startYear ??
+          education.start ??
+          education.startYear ??
+          ""
+      ).slice(0, 4);
+      const endYear = String(
+        first.end ?? first.endYear ?? education.end ?? education.endYear ?? ""
+      ).slice(0, 4);
+      const start = /^\d{4}$/.test(startYear) ? `${startYear}-01` : "";
+      const end = /^\d{4}$/.test(endYear) ? `${endYear}-01` : "";
       const [existingEducationMeta] = await db.query(
         `SELECT meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key = 'profile_education'`,
         [userId]
@@ -575,53 +669,79 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
 
       let updatedEducationData = null;
 
-      // Normalize degree names for DB format
-      const normalizeDegree = (deg) => {
-        if (deg === "Master's Degree") return "Master";
-        if (deg === "Bachelor's Degree") return "Bachelor";
-        if (deg === "Doctoral Degree") return "Ph.D.";
-        return deg || "";
-      };
-      let degree = normalizeDegree(education.degree);
-
       if (
         existingEducationMeta &&
         existingEducationMeta.length > 0 &&
         existingEducationMeta[0].meta_value
       ) {
         try {
-          const rawEducationData = existingEducationMeta[0].meta_value.replace(
+          const raw = existingEducationMeta[0].meta_value.replace(
             /^s:\d+:"(.*)"$/,
             "$1"
           );
 
-          let updatedRawData = rawEducationData.replace(
-            /s:5:"level";a:\d+:{i:0;s:\d+:"[^"]*"/,
-            `s:5:"level";a:2:{i:0;s:${degree.length}:"${degree}"`
-          );
+          let updated = raw
+            .replace(
+              /s:5:"level";a:\d+:{i:0;s:\d+:"[^"]*"/,
+              `s:5:"level";a:1:{i:0;s:${degree.length}:"${degree}"`
+            )
+            .replace(
+              /s:10:"university";a:\d+:{i:0;s:\d+:"[^"]*"/,
+              `s:10:"university";a:1:{i:0;s:${university.length}:"${university}"`
+            )
+            .replace(
+              /s:7:"program";a:\d+:{i:0;s:\d+:"[^"]*"/,
+              `s:7:"program";a:1:{i:0;s:${major.length}:"${major}"`
+            )
+            .replace(
+              /s:3:"gpa";a:\d+:{i:0;s:\d+:"[^"]*"/,
+              `s:3:"gpa";a:1:{i:0;s:${gpa.length}:"${gpa}"`
+            );
 
-          updatedRawData = updatedRawData.replace(
-            /s:10:"university";a:\d+:{i:0;s:\d+:"[^"]*"/,
-            `s:10:"university";a:2:{i:0;s:${education.university.length}:"${education.university}"`
-          );
+          // start_date
+          if (updated.includes('s:10:"start_date"')) {
+            updated = updated.replace(
+              /s:10:"start_date";a:\d+:{i:0;s:\d+:"[^"]*"}/,
+              `s:10:"start_date";a:1:{i:0;s:${start.length}:"${start}"}`
+            );
+          } else {
+            updated = updated.replace(
+              /}$/,
+              `s:10:"start_date";a:1:{i:0;s:${start.length}:"${start}";}}`
+            );
+          }
 
-          updatedRawData = updatedRawData.replace(
-            /s:7:"program";a:\d+:{i:0;s:\d+:"[^"]*"/,
-            `s:7:"program";a:2:{i:0;s:${education.major.length}:"${education.major}"`
-          );
+          // end_date
+          if (updated.includes('s:8:"end_date"')) {
+            updated = updated.replace(
+              /s:8:"end_date";a:\d+:{i:0;s:\d+:"[^"]*"}/,
+              `s:8:"end_date";a:1:{i:0;s:${end.length}:"${end}"}`
+            );
+          } else {
+            updated = updated.replace(
+              /}$/,
+              `s:8:"end_date";a:1:{i:0;s:${end.length}:"${end}";}}`
+            );
+          }
 
-          updatedRawData = updatedRawData.replace(
-            /s:3:"gpa";a:\d+:{i:0;s:\d+:"[^"]*"/,
-            `s:3:"gpa";a:2:{i:0;s:${education.gpa.length}:"${education.gpa}"`
-          );
-
-          updatedEducationData = `s:${updatedRawData.length}:"${updatedRawData}";`;
+          updatedEducationData = `s:${updated.length}:"${updated}";`;
         } catch (e) {
           console.error("Error updating existing education data:", e);
           updatedEducationData = existingEducationMeta[0].meta_value;
         }
       } else {
-        const serializedData = `a:7:{s:7:"country";a:1:{i:0;s:2:"US";}s:10:"university";a:1:{i:0;s:${education.university.length}:"${education.university}";}s:5:"level";a:1:{i:0;s:${degree.length}:"${degree}";}s:7:"program";a:1:{i:0;s:${education.major.length}:"${education.major}";}s:3:"gpa";a:1:{i:0;s:${education.gpa.length}:"${education.gpa}";}s:10:"start_date";a:1:{i:0;s:7:"2020-01";}s:8:"end_date";a:1:{i:0;s:7:"2024-01";}}`;
+        // ساخت دادهٔ جدید legacy
+        const serializedData =
+          `a:7:{` +
+          `s:7:"country";a:1:{i:0;s:2:"US";}` + // اگر نمی‌خوایش حذفش کن
+          `s:10:"university";a:1:{i:0;s:${university.length}:"${university}";}` +
+          `s:5:"level";a:1:{i:0;s:${degree.length}:"${degree}";}` +
+          `s:7:"program";a:1:{i:0;s:${major.length}:"${major}";}` +
+          `s:3:"gpa";a:1:{i:0;s:${gpa.length}:"${gpa}";}` +
+          `s:10:"start_date";a:1:{i:0;s:${start.length}:"${start}";}` +
+          `s:8:"end_date";a:1:{i:0;s:${end.length}:"${end}";}` +
+          `}`;
+
         updatedEducationData = `s:${serializedData.length}:"${serializedData}";`;
       }
 
@@ -650,7 +770,7 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
     }
 
     // -----------------------------
-    // Language proficiency
+    // Language
     // -----------------------------
     if (language) {
       if (language.test) {
@@ -665,17 +785,15 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
         if (requiresScore) {
           await upsertMeta("application_english_score", language.score);
         } else {
-          // Clear score if user selected "I don't have this" / "Not yet..."
           await upsertMeta("application_english_score", "");
         }
       }
     }
 
     // -----------------------------
-    // Standardized tests (GRE/GMAT/LSAT + SAT/ACT for undergrad)
+    // Standardized tests
     // -----------------------------
     if (tests && typeof tests === "object") {
-      // meta_key map
       const TEST_META_MAP = {
         gre: {
           total: "application_gre_total",
@@ -689,58 +807,38 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
           quantitative: "application_gmat_quantitative",
           writing: "application_gmat_writing",
         },
-        lsat: {
-          total: "application_lsat_total",
-        },
+        lsat: { total: "application_lsat_total" },
         sat: {
           total: "application_sat_total",
           reading_writing: "application_sat_reading_writing",
           math: "application_sat_math",
         },
-        act: {
-          total: "application_act_total",
-        },
+        act: { total: "application_act_total" },
       };
 
-      // ریشه‌ی واقعی نمره‌ها (هر دو شکل را پوشش می‌دهد)
       const scoresRoot = tests.scores ?? tests;
-
-      // فقط تست‌هایی را پردازش کن که در payload آمده‌اند و در MAP تعریف داریم
       const payloadTestIds = Object.keys(scoresRoot).filter(
         (id) => TEST_META_MAP[id]
       );
 
-      // اگر هیچ تستی در payload نبود، کاری نکن (مرحله اختیاری است)
-      if (payloadTestIds.length === 0) {
-        // console.log("No standardized tests in payload.");
-      } else {
-        for (const testId of payloadTestIds) {
-          const fieldMap = TEST_META_MAP[testId];
+      for (const testId of payloadTestIds) {
+        const fieldMap = TEST_META_MAP[testId];
+        const src = scoresRoot?.[testId]?.scores ?? scoresRoot?.[testId] ?? {};
 
-          // منبع فیلدها (یا زیرکلید scores یا خود آبجکت)
-          const src =
-            scoresRoot?.[testId]?.scores ?? scoresRoot?.[testId] ?? {};
-
-          for (const fieldId of Object.keys(fieldMap)) {
-            const metaKey = fieldMap[fieldId];
-            const raw = src[fieldId];
-
-            // normalize: null/undefined/"" حذف شود، سایر مقادیر به رشته
-            const val =
-              raw === undefined || raw === null || String(raw).trim() === ""
-                ? ""
-                : String(raw);
-
-            await upsertMeta(metaKey, val);
-            // برای دیباگ می‌تونی موقتاً بازش کنی:
-            console.log(`[tests] ${metaKey} <-`, val);
-          }
+        for (const fieldId of Object.keys(fieldMap)) {
+          const metaKey = fieldMap[fieldId];
+          const raw = src[fieldId];
+          const val =
+            raw === undefined || raw === null || String(raw).trim() === ""
+              ? ""
+              : String(raw);
+          await upsertMeta(metaKey, val);
         }
       }
     }
 
     // -----------------------------
-    // Compute profile completeness (unchanged logic)
+    // Profile completeness
     // -----------------------------
     const [userMetas] = await db.query(
       `SELECT meta_key, meta_value
@@ -750,8 +848,8 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
       [userId]
     );
 
-    const metaData = {};
-    userMetas.forEach((m) => (metaData[m.meta_key] = m.meta_value));
+    const metaMap = {};
+    userMetas.forEach((m) => (metaMap[m.meta_key] = m.meta_value));
 
     const requiredMetaKeys = [
       "profile_education",
@@ -760,7 +858,7 @@ router.post("/profile-form", authenticateToken, async (req, res) => {
       "application_english_test",
     ];
     const isProfileComplete = requiredMetaKeys.every(
-      (k) => metaData[k] && metaData[k] !== ""
+      (k) => metaMap[k] && metaMap[k] !== ""
     );
 
     return res.json({

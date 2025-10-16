@@ -38,7 +38,9 @@ import { Input } from "../../ui/input";
 
 /* ===================== CONFIG ===================== */
 // Use relative base in prod; if you prefer, replace with env-based value
-const API_URL = (import.meta as any)?.env?.VITE_API_URL?.toString?.() ?? "/api";
+const RAW = (import.meta as any)?.env?.VITE_API_URL || "";
+const ROOT = RAW ? RAW.replace(/\/+$/, "") : "";
+export const API_BASE = ROOT ? `${ROOT}/api` : "/api";
 
 /* -------------------- Common Section Wrapper -------------------- */
 interface ComparisonSectionProps {
@@ -200,7 +202,7 @@ const resolveProgramId = async ({
   level?: string | null;
 }): Promise<string | null> => {
   try {
-    const res = await axios.get(`${API_URL}/program-data/resolve`, {
+    const res = await axios.get(`${API_BASE}/program-data/resolve`, {
       params: { program, school, level: level ?? undefined },
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       withCredentials: true,
@@ -258,7 +260,7 @@ const CompareSchools = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `${API_URL}/compare-schools/${ids.join(",")}`,
+        `${API_BASE}/compare-schools/${ids.join(",")}`,
         {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         }
@@ -302,7 +304,7 @@ const CompareSchools = () => {
     setSearchLoading(true);
     try {
       const response = await axios.get(
-        `${API_URL}/schools/search?q=${encodeURIComponent(query)}`,
+        `${API_BASE}/schools/search?q=${encodeURIComponent(query)}`,
         {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
           withCredentials: true,
@@ -489,7 +491,7 @@ const CompareSchools = () => {
         return;
       }
 
-      const { data } = await axios.get(`${API_URL}/program-data/resolve`, {
+      const { data } = await axios.get(`${API_BASE}/program-data/resolve`, {
         params: { program, school: s, level: lvl },
       });
 

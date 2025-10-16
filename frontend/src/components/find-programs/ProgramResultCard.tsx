@@ -119,7 +119,7 @@ export default function ProgramResultCard({
   return (
     <AnimatedCard
       delay={0.2 + index * 0.1}
-      className="border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 w-full"
+      className="border-gray-200 dark:border-gray-700  w-full mt-1"
     >
       <CardContent className="p-3 md:p-5 min-w-0">
         <div className="flex flex-col space-y-5 md:space-y-6 min-w-0">

@@ -51,7 +51,7 @@ const NavigationButtons = ({
   return (
     <nav
       className={[
-        inline ? "mb-10" : "mb-10",
+        inline ? "mb-14" : "mb-14",
         "w-full ",
         sticky
           ? [
@@ -75,7 +75,7 @@ const NavigationButtons = ({
         {/* ردیف دکمه‌ها */}
         <div
           className="
-        scroll-strip w-full
+        scroll-strip w-full my-2
         pl-4 md:pl-6 
         flex items-center gap-2 md:gap-x-4 lg:gap-x-6
         overflow-x-auto md:overflow-visible
@@ -100,13 +100,13 @@ const NavigationButtons = ({
                 size="sm"
                 className={`
                 relative inline-flex items-center gap-1.5 md:gap-2.5
-                h-10 md:h-12 px-3 md:px-4 py-1
+                h-8 md:h-10 px-3 md:px-4 py-1
                 rounded-xl
                 shrink-0 md:shrink snap-start
                 min-w-max
                 transition-all duration-300
                 ${isActive ? "" : baseInactive}
-                ${inline ? "text-xs" : "text-sm md:text-base"}
+                ${inline ? "text-xs" : "text-sm "}
               `}
               >
                 <NavLink to={to}>

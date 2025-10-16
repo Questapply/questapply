@@ -16,7 +16,7 @@ import { mergeFilterPatch } from "../chat/mergeFilters";
 import type { FilterSnapshot, FilterPatch } from "../chat/actions";
 import ResultsColumn from "../chat/ResultsColumn";
 import ProgramResultCard from "@/components/find-programs/ProgramResultCard";
-
+import { Skeleton } from "../ui/skeleton";
 import {
   degreeLevelOptions,
   englishTestOptions,
@@ -92,10 +92,10 @@ type UserPreference = {
 type FiltersState = {
   country?: string;
   state?: string[]; // multi
-  school?: string;
+  school?: string[];
   degreeLevel?: string;
-  areaOfStudy?: string[]; // multi
-  program?: string[]; // multi
+  areaOfStudy?: string; // multi
+  program?: string; // multi
   orderBy?: string;
   // سایر فیلترها هم هستند، ولی این ۷ مورد با Apply اعمال می‌شن
   english?: string;
@@ -117,22 +117,25 @@ const mapFiltersToApiParams = (
   filters: FiltersState
 ): Record<string, string> => {
   const out: Record<string, string> = {};
+
+  const csvKeys = new Set(["state", "school", "deadlineMonths"]);
   Object.entries(filters).forEach(([key, value]) => {
     if (value == null) return;
-    if (Array.isArray(value)) {
-      if (value.length) {
+
+    if (csvKeys.has(key)) {
+      const arr = Array.isArray(value) ? value : [];
+      if (arr.length) {
         const apiKey = key === "deadlineMonths" ? "deadline_months" : key;
-        out[apiKey] = value.map(String).join(",");
+        out[apiKey] = arr.map(String).join(",");
       }
       return;
     }
+
     const s = String(value).trim();
-    if (!s) return;
-    out[key] = s;
+    if (s) out[key] = s;
   });
-  if (!filters.english) {
-    delete out.englishScore;
-  }
+
+  if (!filters.english) delete out.englishScore;
   if (!out.orderBy) out.orderBy = "qs_rank";
   return out;
 };
@@ -591,10 +594,10 @@ const FindPrograms = () => {
             up.level === "Ph.D." ? "PhD" : String(up.level);
         }
         if (up.areaOfStudy?.id) {
-          initSelected.areaOfStudy = [String(up.areaOfStudy.id)];
+          initSelected.areaOfStudy = String(up.areaOfStudy.id);
         }
         if (up.program) {
-          initSelected.program = [String(up.program)];
+          initSelected.program = String(up.program);
         }
 
         if (up.englishTest) {
@@ -607,9 +610,9 @@ const FindPrograms = () => {
           await fetchStates(initSelected.country);
           await fetchSchoolsForDropdown(initSelected.country);
         }
-        if (initSelected.areaOfStudy?.length && initSelected.degreeLevel) {
+        if (initSelected.areaOfStudy && initSelected.degreeLevel) {
           await fetchProgramsByAreasAndLevel(
-            initSelected.areaOfStudy,
+            [initSelected.areaOfStudy],
             initSelected.degreeLevel
           );
         }
@@ -636,11 +639,14 @@ const FindPrograms = () => {
   const handleFilterChange = useCallback(
     (key: keyof FiltersState, value?: string) => {
       setSelectedFilters((prev) => {
-        const next: FiltersState = { ...prev, [key]: value };
+        const next: FiltersState = { ...prev };
+
+        if (value) (next as any)[key] = value;
+        else delete (next as any)[key];
+
         if (key === "country") {
           next.state = [];
-          next.school = undefined;
-
+          next.school = [];
           if (value) {
             fetchStates(value);
             fetchSchoolsForDropdown(value);
@@ -649,14 +655,28 @@ const FindPrograms = () => {
             setAvailableSchools([]);
           }
         }
+
         if (key === "degreeLevel") {
-          const areas = Array.isArray(next.areaOfStudy) ? next.areaOfStudy : [];
-          if (areas.length && value) {
-            fetchProgramsByAreasAndLevel(areas, value);
+          // اگر area داریم، برنامه‌ها را برای (area, degree) بگیر
+          const area = next.areaOfStudy ? [next.areaOfStudy] : [];
+          if (area.length && value) {
+            fetchProgramsByAreasAndLevel(area, value);
           } else {
             setAvailablePrograms([]);
           }
+          next.program = undefined;
         }
+
+        if (key === "areaOfStudy") {
+          const level = next.degreeLevel;
+          if (value && level) {
+            fetchProgramsByAreasAndLevel([value], level);
+          } else {
+            setAvailablePrograms([]);
+          }
+          next.program = undefined;
+        }
+
         return next;
       });
     },
@@ -664,31 +684,19 @@ const FindPrograms = () => {
   );
 
   const handleMultiFilterChange = useCallback(
-    (key: keyof FiltersState, values: string[]) => {
-      setSelectedFilters((prev) => {
-        const next = { ...prev, [key]: values };
-        if (key === "areaOfStudy") {
-          const level = next.degreeLevel;
-          if (values.length && level) {
-            fetchProgramsByAreasAndLevel(values, level);
-          } else {
-            setAvailablePrograms([]);
-            next.program = [];
-          }
-        }
-        return next;
-      });
+    (key: "state" | "school", values: string[]) => {
+      setSelectedFilters((prev) => ({ ...prev, [key]: values }));
     },
-    [fetchProgramsByAreasAndLevel]
+    []
   );
 
   // ---------------- Apply (اعمال ۷ فیلتر مثل FindSchool) ----------------
+  const has = (v?: string) => typeof v === "string" && v.trim().length > 0;
   const isApplyEnabled = useMemo(() => {
-    return Boolean(
-      selectedFilters.country &&
-        selectedFilters.degreeLevel &&
-        Array.isArray(selectedFilters.areaOfStudy) &&
-        selectedFilters.areaOfStudy.length > 0
+    return (
+      has(selectedFilters.country) &&
+      has(selectedFilters.degreeLevel) &&
+      has(selectedFilters.areaOfStudy)
     );
   }, [
     selectedFilters.country,
@@ -958,19 +966,7 @@ const FindPrograms = () => {
   const chatComponent = (
     <>
       {/* Header */}
-      {/* <div className="border-b px-4 py-3 rounded-t-lg border-border bg-muted/50 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">AI</span>
-          </div>
-          <div>
-            <h3 className="font-semibold">QuestApply Assistant</h3>
-            <p className="text-xs text-muted-foreground">
-              Ask me about programs
-            </p>
-          </div>
-        </div>
-      </div> */}
+
       <ChatHeader
         sessions={sessions}
         currentSessionId={sessionId}
@@ -1120,8 +1116,12 @@ const FindPrograms = () => {
               label="School"
               icon={<span>{filterIcons.schools}</span>}
               options={availableSchools}
-              onSelect={(v) => handleFilterChange("school", v)}
-              selectedValue={selectedFilters.school || ""}
+              multiple
+              showCount
+              selectedValues={selectedFilters.school || []}
+              onChange={(vals) =>
+                handleMultiFilterChange("school", vals as string[])
+              }
               disabled={
                 loadingSchools ||
                 !selectedFilters.country ||
@@ -1149,12 +1149,8 @@ const FindPrograms = () => {
               label="Area of Study"
               icon={<span>{filterIcons.areaOfStudy}</span>}
               options={areaOptions}
-              multiple
-              showCount
-              selectedValues={selectedFilters.areaOfStudy || []}
-              onChange={(vals) =>
-                handleMultiFilterChange("areaOfStudy", vals as string[])
-              }
+              selectedValue={selectedFilters.areaOfStudy || ""}
+              onSelect={(v) => handleFilterChange("areaOfStudy", v)}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
               maxLabelChars={20}
@@ -1165,18 +1161,11 @@ const FindPrograms = () => {
               label="Program"
               icon={<span>{filterIcons.programs}</span>}
               options={availablePrograms}
-              multiple
-              showCount
-              selectedValues={selectedFilters.program || []}
-              onChange={(vals) =>
-                handleMultiFilterChange("program", vals as string[])
-              }
+              selectedValue={selectedFilters.program || ""}
+              onSelect={(v) => handleFilterChange("program", v)}
               disabled={
                 loadingPrograms ||
-                !(
-                  selectedFilters.areaOfStudy &&
-                  selectedFilters.areaOfStudy.length > 0
-                ) ||
+                !selectedFilters.areaOfStudy ||
                 !selectedFilters.degreeLevel ||
                 availablePrograms.length === 0
               }
@@ -1306,65 +1295,81 @@ const FindPrograms = () => {
       <DualPaneLayout
         chat={chatComponent}
         results={[
-          <ResultsColumn
-            key="programs-results"
-            padded={false}
-            emptyState={
-              <div className="text-muted-foreground">No results to display</div>
-            }
-          >
-            {/* ⬇️ اینجا همون JSX فعلیِ نتایج برنامه‌ها رو بدون تغییر paste کن */}
-            {/* مثال فرضی: */}
-            {!loading && noResults && (
-              <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                  No programs found
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Try adjusting your filters to find more programs.
-                </p>
-              </div>
-            )}
-
-            {!loading && !noResults && programs.length > 0 && (
+          <ResultsColumn key="programs-results" padded={false}>
+            {/* Loading skeleton */}
+            {loading ? (
               <div className="space-y-6">
-                {programs.map((program, index) => (
-                  <ProgramResultCard
-                    key={program.id}
-                    index={index}
-                    program={program}
-                    selectedEnglish={selectedFilters.english || "TOEFL"}
-                    isCompared={programsToCompare.includes(program.id)}
-                    isFavorite={!!favorites[program.id]}
-                    isInList={programList.includes(String(program.id))}
-                    onToggleCompare={(id) =>
-                      setProgramsToCompare((prev) =>
-                        prev.includes(id)
-                          ? prev.filter((x) => x !== id)
-                          : [...prev, id]
-                      )
-                    }
-                    onToggleFavorite={(id) => toggleFavorite(id)}
-                    onProgramInfo={(id) => handleProgramInformation(id)}
-                    onToggleList={(id, name) => toggleProgramInList(id, name)}
-                  />
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="p-6 border rounded-lg bg-white dark:bg-gray-900 flex gap-6"
+                  >
+                    <div className="w-20 h-20 rounded-lg bg-gray-200 dark:bg-gray-700" />
+                    <div className="flex-1 space-y-3">
+                      <Skeleton className="h-5 w-1/3 rounded" />
+                      <Skeleton className="h-4 w-1/2 rounded" />
+                      <Skeleton className="h-4 w-1/4 rounded" />
+                      <Skeleton className="h-4 w-full rounded" />
+                    </div>
+                  </div>
                 ))}
+              </div>
+            ) : (
+              <>
+                {/* Results */}
+                {!noResults && programs.length > 0 && (
+                  <div className="space-y-6">
+                    {programs.map((program, index) => (
+                      <ProgramResultCard
+                        key={program.id}
+                        index={index}
+                        program={program}
+                        selectedEnglish={selectedFilters.english || "TOEFL"}
+                        isCompared={programsToCompare.includes(program.id)}
+                        isFavorite={!!favorites[program.id]}
+                        isInList={programList.includes(String(program.id))}
+                        onToggleCompare={(id) =>
+                          setProgramsToCompare((prev) =>
+                            prev.includes(id)
+                              ? prev.filter((x) => x !== id)
+                              : [...prev, id]
+                          )
+                        }
+                        onToggleFavorite={(id) => toggleFavorite(id)}
+                        onProgramInfo={(id) => handleProgramInformation(id)}
+                        onToggleList={(id, name) =>
+                          toggleProgramInList(id, name)
+                        }
+                      />
+                    ))}
 
-                {hasMore && programs.length > 0 && (
-                  <div className="mt-8 flex justify-center">
-                    <Button
-                      onClick={loadMore}
-                      disabled={loadingMore}
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
-                    >
-                      {loadingMore ? "Loading..." : "Load More Programs"}
-                    </Button>
+                    {hasMore && (
+                      <div className="mt-8 flex justify-center">
+                        <Button
+                          onClick={loadMore}
+                          disabled={loadingMore}
+                          className="bg-purple-600 hover:bg-purple-700 text-white"
+                        >
+                          {loadingMore ? "Loading..." : "Load More Programs"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* ⬆️ پایان JSX نتایج شما */}
+                {/* No results */}
+                {noResults || programs.length === 0 ? (
+                  <div className="text-center py-10 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-inner mt-8">
+                    <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                      No programs found
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Try adjusting your filters to find more programs.
+                    </p>
+                  </div>
+                ) : null}
+              </>
+            )}
           </ResultsColumn>,
         ]}
         layout={{

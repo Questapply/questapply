@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label as UiLabel } from "@/components/ui/label";
+import { Sparkles, Scissors, Expand } from "lucide-react";
 
 // API
 import {
@@ -84,6 +85,29 @@ const apiToUiKey: Record<SopKey, SectionKey | null> = {
   why: "whySchool",
   whySchool: "whySchool", // ← legacy key را هم نگه دار
   goal: "goal",
+};
+
+const localTransform = (
+  key: SectionKey,
+  action: "improve" | "shorten" | "expand"
+) => {
+  const current = sections[key]?.content || "";
+  let next = current;
+
+  if (action === "shorten") {
+    const w = current.split(/\s+/).filter(Boolean);
+    const target = Math.max(18, Math.floor(w.length * 0.7));
+    next = w.slice(0, target).join(" ") + (w.length > target ? "…" : "");
+  } else if (action === "expand") {
+    next =
+      (current ? current + " " : "") +
+      "This additional context further clarifies my motivation and readiness for graduate study.";
+  } else {
+    // improve: تمیزکاری ساده‌ی نگارشی
+    next = current.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n");
+  }
+
+  updateSection(key, next);
 };
 
 /* ------------------- theme util ------------------- */
@@ -165,6 +189,35 @@ export default function SOPEditor() {
       }, 0),
     [sections]
   );
+  // بالای return و داخل function SOPEditor()
+  const applyQuickEdit = (
+    key: SectionKey,
+    action: "improve" | "shorten" | "expand"
+  ) => {
+    const current = sections[key]?.content || "";
+    let next = current;
+
+    if (action === "shorten") {
+      const w = current.split(/\s+/).filter(Boolean);
+      const target = Math.max(18, Math.floor(w.length * 0.7));
+      next = w.slice(0, target).join(" ") + (w.length > target ? "…" : "");
+    } else if (action === "expand") {
+      next =
+        (current ? current + " " : "") +
+        "This experience further strengthened my readiness for graduate study.";
+    } else {
+      // improve: کمی تمیزکاری سبک
+      next = current.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n");
+    }
+
+    setSections((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || { title: SECTION_DEFS[key].title }),
+        content: next,
+      },
+    }));
+  };
 
   /* ------------------- load meta → sections ------------------- */
   useEffect(() => {
@@ -557,13 +610,11 @@ export default function SOPEditor() {
               size="sm"
               variant="outline"
               onClick={handlePreview}
-              disabled={!isCreated}
               className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
               style={{
                 background: "#0e1526",
                 borderColor: "#25324a",
                 color: "#9ca3af",
-                opacity: !isCreated ? 0.6 : 1,
               }}
             >
               Preview
@@ -571,12 +622,10 @@ export default function SOPEditor() {
             <Button
               size="sm"
               onClick={() => setExportOpen(true)}
-              disabled={!isCreated}
               className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
               style={{
                 background: "#7c3aed",
                 color: "white",
-                opacity: !isCreated ? 0.6 : 1,
               }}
             >
               <Download className="w-4 h-4 mr-1" /> Export
@@ -852,13 +901,39 @@ export default function SOPEditor() {
                   />
                 </div>
                 <div>
-                  <div className="mb-2">
+                  <div className="mb-2 flex justify-between items-center">
                     <span
                       className="text-[12px] md:text-sm font-medium"
                       style={{ color: "#9ca3af" }}
                     >
                       Preview
                     </span>
+                    <div className="flex flex-wrap gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => applyQuickEdit(key, "improve")}
+                        className="text-xs gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" /> Improve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => applyQuickEdit(key, "shorten")}
+                        className="text-xs gap-1"
+                      >
+                        <Scissors className="w-3 h-3" /> Shorten
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => applyQuickEdit(key, "expand")}
+                        className="text-xs gap-1"
+                      >
+                        <Expand className="w-3 h-3" /> Expand
+                      </Button>
+                    </div>
                   </div>
                   <div
                     className="min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap"

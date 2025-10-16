@@ -11,6 +11,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { unserialize } from "php-serialize";
 const execFileAsync = promisify(execFile);
 
 import { fileURLToPath } from "url";
@@ -134,6 +135,34 @@ function safeParseJSON(raw) {
   }
 }
 // ---------- Helpers to stringify structured sections for export/preview ----------
+function safeParseMeta(raw) {
+  // اگر null/undefined بود همان را برگردان
+  if (raw === null || raw === undefined) return raw;
+
+  // اگر قبلاً آبجکت است، دست نزن
+  if (typeof raw === "object") return raw;
+
+  const s = String(raw).trim();
+  if (!s) return s;
+
+  // 1) اول JSON را امتحان کن
+  try {
+    const j = JSON.parse(s);
+    if (j && typeof j === "object") return j;
+  } catch {}
+
+  // 2) بعد PHP serialized (مثلاً a:2:{i:0;...})
+  try {
+    // برخی سیستم‌ها escape شده می‌فرستند؛ قبل از unserialize پاک‌سازی سبک
+    const unescaped = s.replace(/\\+"/g, '"');
+    const p = unserialize(unescaped);
+    // خروجی php-serialize می‌تواند آبجکت/آرایهٔ JS باشد
+    if (p && (Array.isArray(p) || typeof p === "object")) return p;
+  } catch {}
+
+  // 3) اگر هیچ‌کدام نشد، همان متن خام
+  return s;
+}
 
 function textFromItemList(v) {
   try {
@@ -451,17 +480,44 @@ function buildItemList(metaVal, { pick } = {}) {
 
 // Education → { blocks: [{ title, university, description?, start?, end? }] }
 function buildEducationBlocks(metaVal) {
-  const v = safeParseJSON(metaVal);
-  const rows = Array.isArray(v) ? v : Array.isArray(v?.rows) ? v.rows : [];
+  const v = safeParseMeta(metaVal); // JSON یا PHP-serialized
+
+  // 1) اگر آرایه مستقیم بود
+  let rows =
+    (Array.isArray(v) && v) ||
+    // 2) اگر v.rows آرایه بود
+    (v && Array.isArray(v.rows) && v.rows) ||
+    // 3) اگر v.education آرایه بود
+    (v && Array.isArray(v.education) && v.education) ||
+    [];
+
+  // 4) اگر آبجکت تکی با فیلدهای شناخته‌شده بود، به یک ردیف تبدیلش کن
+  if (!rows.length && v && typeof v === "object") {
+    const looksSingle =
+      v.degree ||
+      v.level ||
+      v.program ||
+      v.field ||
+      v.university ||
+      v.school ||
+      v.institute;
+    if (looksSingle) rows = [v];
+  }
+
   const blocks = rows
-    .map((r) => ({
-      title: [r?.level, r?.program].filter(Boolean).join(" — ") || "",
-      university: r?.university || r?.school || "",
-      description: r?.description || r?.thesis || r?.dissertation || "",
-      start: r?.startDate || r?.from || "",
-      end: r?.endDate || r?.to || "",
-    }))
+    .map((r) => {
+      const title = [r?.level || r?.degree || "", r?.program || r?.field || ""]
+        .filter(Boolean)
+        .join(" — ");
+      const university = r?.university || r?.school || r?.institute || "";
+      const description =
+        r?.description || r?.thesis || r?.dissertation || r?.details || "";
+      const start = r?.startDate || r?.start || r?.from || "";
+      const end = r?.endDate || r?.end || r?.to || "";
+      return { title, university, description, start, end };
+    })
     .filter((b) => b.title || b.university || b.description);
+
   return blocks.length ? { blocks } : null;
 }
 
@@ -610,6 +666,7 @@ router.get("/prefill", authenticateToken, async (req, res) => {
       "cv_header",
       "cv_summary",
       "cv_research_interest",
+      "profile_education_json",
       "cv_education",
       "cv_professional_history",
       "cv_publication",
@@ -669,7 +726,9 @@ router.get("/prefill", authenticateToken, async (req, res) => {
         personal = ""; // بگذار UI placeholder خودش را نشان دهد
       }
     }
-
+    const eduFromJson = get("profile_education_json"); // JSON خالص (ترجیحی)
+    const eduFromCv = get("cv_education");
+    const eduFromProf = get("profile_education");
     // 3) ساخت سکشن‌ها (خالی اگر نداریم؛ فرانت fallback دارد)
     const sections = {
       personal: {
@@ -692,8 +751,9 @@ router.get("/prefill", authenticateToken, async (req, res) => {
       education: {
         title: "Education",
         content:
-          buildEducationBlocks(getMeta(metaMap, "cv_education")) ||
-          buildEducationBlocks(getMeta(metaMap, "profile_education")) ||
+          buildEducationBlocks(eduFromJson) ||
+          buildEducationBlocks(eduFromCv) ||
+          buildEducationBlocks(eduFromProf) ||
           null,
       },
       experience: {
@@ -943,65 +1003,77 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
         .json({ message: "Unauthorized: User ID not found." });
     }
 
-    // 2) تعیین resumeId
+    // 2) تعیین resumeId (فقط وقتی جدید است UUID بساز)
     const currentResumeId =
       resume_id && resume_id !== "new_resume_placeholder"
         ? resume_id
         : uuidv4();
 
+    // ⚠️ template_id اختیاری است؛ اگر نیاید، چیزی را اووررایت نکنیم
+    const tplToSet = typeof template_id === "number" ? template_id : null; // فقط وقتی عدد است
+
     await connection.beginTransaction();
 
-    // 3) حلقه‌ی سکشن‌ها با نرمال‌سازی content
+    // 3) حلقه‌ی سکشن‌ها (PATCH رفتار)
     for (const sectionId of Object.keys(sections)) {
       const payload = sections[sectionId];
-      let dbContent;
 
-      if (typeof payload === "string") {
-        // متن ساده
-        dbContent = payload;
-      } else if (payload && typeof payload === "object") {
-        // { title, content } یا مستقیماً content
-        const inner = "content" in payload ? payload.content : payload;
-        if (typeof inner === "string") {
-          dbContent = inner; // متن
-        } else {
-          dbContent = JSON.stringify(inner || {}); // آبجکت ساختاری
-        }
-      } else {
-        dbContent = "";
+      // --- حذف: اگر payload === null، رکورد را حذف کن و برو بعدی
+      if (payload === null) {
+        await connection.execute(
+          `DELETE FROM qacom_wp_user_resume
+             WHERE user_id=? AND resume_id=? AND section=?`,
+          [userId, currentResumeId, sectionId]
+        );
+        continue;
       }
 
-      // آیا قبلاً این سکشن برای این رزومه ذخیره شده؟
+      // --- نرمال‌سازی content: همانی که فرانت نشان می‌دهد را ذخیره کن
+      let dbContent;
+      if (typeof payload === "string") {
+        dbContent = payload;
+      } else if (payload && typeof payload === "object") {
+        // { title, content } یا خودِ content
+        const inner = "content" in payload ? payload.content : payload;
+        if (typeof inner === "string") {
+          dbContent = inner;
+        } else {
+          dbContent = JSON.stringify(inner || {});
+        }
+      } else {
+        dbContent = ""; // اگر چیزی نبود، متن خالی
+      }
+
+      // آیا قبلاً این سکشن ذخیره شده؟
       const [existing] = await connection.execute(
         `SELECT 1 FROM qacom_wp_user_resume WHERE user_id=? AND resume_id=? AND section=?`,
         [userId, currentResumeId, sectionId]
       );
 
       if (existing.length) {
-        await connection.execute(
-          `UPDATE qacom_wp_user_resume
-              SET content=?, template_id=?
-            WHERE user_id=? AND resume_id=? AND section=?`,
-          [
-            dbContent,
-            Number(template_id ?? 0),
-            userId,
-            currentResumeId,
-            sectionId,
-          ]
-        );
+        // ⚠️ template_id را فقط وقتی در این درخواست داده شده آپدیت کن
+        if (tplToSet !== null) {
+          await connection.execute(
+            `UPDATE qacom_wp_user_resume
+               SET content=?, template_id=?, updated_at=NOW()
+             WHERE user_id=? AND resume_id=? AND section=?`,
+            [dbContent, tplToSet, userId, currentResumeId, sectionId]
+          );
+        } else {
+          await connection.execute(
+            `UPDATE qacom_wp_user_resume
+               SET content=?, updated_at=NOW()
+             WHERE user_id=? AND resume_id=? AND section=?`,
+            [dbContent, userId, currentResumeId, sectionId]
+          );
+        }
       } else {
+        // درج رکورد جدید برای همین سکشن
         await connection.execute(
           `INSERT INTO qacom_wp_user_resume
              (resume_id, user_id, template_id, section, content, created_at)
            VALUES (?, ?, ?, ?, ?, NOW())`,
-          [
-            currentResumeId,
-            userId,
-            Number(template_id ?? 0),
-            sectionId,
-            dbContent,
-          ]
+          [currentResumeId, userId, tplToSet ?? 0, sectionId, dbContent]
         );
       }
     }
@@ -1014,6 +1086,7 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
           ? "Resume saved successfully!"
           : "New resume created and saved successfully!",
       new_resume_id: currentResumeId,
+      id: currentResumeId,
     });
   } catch (error) {
     if (connection) await connection.rollback();
@@ -1025,6 +1098,7 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
     if (connection) connection.release();
   }
 });
+
 /* ----------------------- DELETE /resume/:id ----------------------- */
 router.delete("/resume/:resumeId", authenticateToken, async (req, res) => {
   try {

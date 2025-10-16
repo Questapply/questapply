@@ -92,6 +92,28 @@ function getCountryFlag(countryName: string): string {
       return "🌍";
   }
 }
+const countryNameToId = Object.entries(countryMap).reduce<
+  Record<string, string>
+>((acc, [id, name]) => {
+  acc[baseName(name).toLowerCase()] = id; // "United States (USA)" → "united states"
+  return acc;
+}, {});
+
+const findCountryId = (input: any): string => {
+  if (!input) return "";
+  if (typeof input === "string") {
+    const k = baseName(input).toLowerCase();
+    return countryNameToId[k] || "";
+  }
+  if (typeof input === "object") {
+    if (input.id) return String(input.id);
+    if (input.name) {
+      const k = baseName(input.name).toLowerCase();
+      return countryNameToId[k] || "";
+    }
+  }
+  return "";
+};
 
 // آپشن‌های کامپوننت Select
 const countryOptions = Object.entries(countryMap).map(([id, name]) => ({
@@ -99,7 +121,19 @@ const countryOptions = Object.entries(countryMap).map(([id, name]) => ({
   name,
   flag: getCountryFlag(name),
 }));
-
+const findFieldId = (
+  input: any,
+  list: Array<{ id: string; name: string }>
+): string => {
+  if (!input) return "";
+  if (typeof input === "object" && input.id) return String(input.id);
+  const name = typeof input === "string" ? input : input?.name;
+  if (!name) return "";
+  const item = list.find(
+    (f) => f.name?.toLowerCase() === String(name).toLowerCase()
+  );
+  return item ? String(item.id) : "";
+};
 // (اختیاری) اگر می‌خوای در UI نام بدون پرانتز دیده شود:
 const displayCountryName = (name: string) => baseName(name);
 const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
@@ -111,20 +145,15 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
     if (level.includes("Bachelor")) return "Bachelor's Degree";
     return level;
   };
-
-  const [countryId, setCountryId] = useState<string>(() => {
-    if (typeof data.country === "object" && data.country?.id)
-      return String(data.country.id);
-    return "";
-  });
+  const [countryId, setCountryId] = useState<string>(() =>
+    findCountryId(data.country)
+  );
 
   const [level, setLevel] = useState(() => normalizeLevel(data.level || ""));
 
-  const [fieldId, setFieldId] = useState<string>(() => {
-    if (typeof data.field === "object" && data.field?.id)
-      return String(data.field.id);
-    return "";
-  });
+  const [fieldId, setFieldId] = useState<string>(() =>
+    findFieldId(data.field, data.availableFields || [])
+  );
 
   const [availableFields, setAvailableFields] = useState<
     Array<{ id: string; name: string }>
@@ -141,41 +170,58 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
   const fieldSearchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (typeof data.country === "object" && data.country?.id) {
-      setCountryId(String(data.country.id));
-    }
-    if (data.level) {
-      setLevel(normalizeLevel(data.level));
-    }
-    if (typeof data.field === "object" && data.field?.id) {
-      setFieldId(String(data.field.id));
-    }
+    // ✅ Country: هم با id هم با name کار می‌کند
+    const nextCountryId = findCountryId(data.country);
+    if (nextCountryId) setCountryId(nextCountryId);
 
-    if (data.availableFields && data.availableFields.length > 0) {
-      const uniqueFieldsMap = new Map<string, { id: string; name: string }>();
-      data.availableFields.forEach((field) => {
-        if (field.id)
-          uniqueFieldsMap.set(String(field.id), {
-            ...field,
-            id: String(field.id),
-          });
+    // ✅ Level
+    if (data.level) setLevel(normalizeLevel(data.level));
+
+    // Helper: name → id برای فیلد
+    const findFieldIdLocal = (
+      input: any,
+      list: Array<{ id: string; name: string }>
+    ): string => {
+      if (!input) return "";
+      if (typeof input === "object" && input.id) return String(input.id);
+      const name = typeof input === "string" ? input : input?.name;
+      if (!name) return "";
+      const item = list.find(
+        (f) => f.name?.toLowerCase() === String(name).toLowerCase()
+      );
+      return item ? String(item.id) : "";
+    };
+
+    // ✅ یکتاسازی و ساخت لیست فیلدها از API
+    const uniq = new Map<string, { id: string; name: string }>();
+    (data.availableFields || []).forEach((f) => {
+      if (f?.id)
+        uniq.set(String(f.id), { id: String(f.id), name: f.name || "" });
+    });
+
+    // اگر فیلدِ انتخاب‌شده داخل لیست نیست، با name اضافه‌اش کن
+    const selectedFieldIdFromData = findFieldIdLocal(
+      data.field,
+      Array.from(uniq.values())
+    );
+    if (selectedFieldIdFromData && !uniq.has(selectedFieldIdFromData)) {
+      uniq.set(selectedFieldIdFromData, {
+        id: selectedFieldIdFromData,
+        name:
+          (typeof data.field === "object"
+            ? data.field?.name
+            : String(data.field)) || "Selected Program",
       });
-
-      if (typeof data.field === "object" && data.field?.id) {
-        const fid = String(data.field.id);
-        if (!uniqueFieldsMap.has(fid)) {
-          uniqueFieldsMap.set(fid, {
-            id: fid,
-            name: data.field.name || "Selected Program",
-          });
-        }
-      }
-
-      setAvailableFields(Array.from(uniqueFieldsMap.values()));
-      if (typeof data.field === "object" && data.field?.id && !fieldId) {
-        setFieldId(String(data.field.id));
-      }
     }
+
+    const nextFields = Array.from(uniq.values());
+    if (nextFields.length) setAvailableFields(nextFields);
+
+    // ✅ فیلد انتخاب‌شده را از روی name/id تعیین کن (بدون پاک‌کردن انتخاب موجود)
+    const resolvedFieldId =
+      selectedFieldIdFromData || findFieldIdLocal(data.field, nextFields);
+
+    if (resolvedFieldId) setFieldId(resolvedFieldId);
   }, [data]);
 
   useEffect(() => {

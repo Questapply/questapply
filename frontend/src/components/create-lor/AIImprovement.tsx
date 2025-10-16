@@ -2,11 +2,18 @@ import React, { useState } from "react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { toast } from "../../hooks/use-toast";
+import { Wand } from "lucide-react";
 
-const AIImprovement = () => {
-  const [selectedExample, setSelectedExample] = useState<string | null>(null);
+// اگر همین ProgressCircle را در پروژه SOP دارید از همان استفاده کنید
+// در غیر این صورت جایگزینش کنید یا حذفش کنید.
+import ProgressCircle from "../ui/progress-circle";
 
-  // Example LORs for demonstration
+const LORImprovement: React.FC = () => {
+  // متن‌های ورودی/خروجی
+  const [original, setOriginal] = useState<string>("");
+  const [improved, setImproved] = useState<string>("");
+
+  // نمونه‌های دم‌دستی (مثل نسخه فعلی شما)
   const examples = {
     generalAssessment: {
       original:
@@ -22,121 +29,180 @@ const AIImprovement = () => {
     },
   };
 
-  const handleAcceptSuggestion = (section: string) => {
+  // دکمه‌ی Preview (در حال حاضر فقط پیام می‌دهد؛ اگر خواستید می‌توانید Modal diff اضافه کنید)
+  const preview = () => {
+    if (!original.trim() && !improved.trim()) {
+      toast({
+        title: "Nothing to preview",
+        description: "Add some text first.",
+      });
+      return;
+    }
     toast({
-      title: "Suggestion Accepted",
-      description: `The improved ${section} has been applied.`,
-      variant: "default",
+      title: "Preview ready",
+      description: "Scroll to compare both sides.",
     });
   };
 
-  const handleDecline = (section: string) => {
-    toast({
-      title: "Suggestion Declined",
-      description: `The ${section} suggestion has been dismissed.`,
-      variant: "default",
-    });
-  };
+  // شبیه‌سازی بهبود (اینجا می‌توانید API واقعی بگذارید)
+  const runImprove = async () => {
+    const src = original.trim();
+    if (!src) {
+      // اگر چیزی وارد نشده، برای دمو یکی از مثال‌ها را می‌ریزیم
+      setOriginal(examples.generalAssessment.original);
+      setImproved(examples.generalAssessment.improved);
+      toast({
+        title: "Example loaded",
+        description: "Filled with a sample LOR.",
+      });
+      return;
+    }
 
-  const handleSaveChanges = () => {
+    // بهبود ساده‌ی محلی – موقتی
+    const better = src
+      .replace(/\b(good|nice|very good)\b/gi, "strong")
+      .replace(/\b(work|worked|works)\b/gi, "contributed")
+      .replace(/\b(class)\b/gi, "Advanced Computer Systems course")
+      .concat(
+        src.endsWith(".") ? " " : ". ",
+        "Her performance places her among the top students I have mentored in recent years."
+      );
+
+    setImproved(better);
     toast({
-      title: "Changes Saved",
-      description: "All accepted improvements have been applied to your LOR.",
-      variant: "default",
+      title: "Improved",
+      description: "An improved draft has been generated.",
     });
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">AI Improvement</h2>
-        <p className="text-gray-600 dark:text-gray-300">
-          Select one of your LORs to improve with AI suggestions.
-        </p>
+    <div className="p-6">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+        AI-Powered LOR Improvement
+      </h2>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">
+        Paste your Letter of Recommendation on the left. Our AI suggests
+        clearer, stronger wording on the right while preserving your intent and
+        voice.
+      </p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Original */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+            Your Original LOR
+          </h3>
+          <Textarea
+            className="min-h-[400px] font-serif text-base"
+            placeholder="Paste your LOR here…"
+            value={original}
+            onChange={(e) => setOriginal(e.target.value)}
+          />
+          <div className="flex gap-2 mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setOriginal(examples.comparisonWithPeers.original);
+                setImproved("");
+                toast({ title: "Sample inserted" });
+              }}
+            >
+              Load Sample
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setOriginal("");
+                setImproved("");
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+
+        {/* Improved */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+            AI Improved Version
+          </h3>
+          <div className="border border-gray-200 dark:border-gray-700 rounded-md p-4 min-h-[400px] font-serif text-base bg-gray-50 dark:bg-gray-900/50 whitespace-pre-wrap">
+            {improved ? (
+              improved
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">
+                AI suggestions will appear here after you submit your LOR…
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        {/* General Assessment Section */}
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-          <h3 className="text-lg font-medium mb-2">General Assessment</h3>
+      {/* Actions */}
+      <div className="flex justify-center mt-8 space-x-4">
+        <Button variant="outline" size="lg" className="px-6" onClick={preview}>
+          Preview Changes
+        </Button>
+        <Button
+          size="lg"
+          className="px-6 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600"
+          onClick={runImprove}
+        >
+          <Wand className="h-5 w-5 mr-2" />
+          Improve My LOR
+        </Button>
+      </div>
 
-          <div className="border border-gray-200 dark:border-gray-700 rounded p-3 mb-4">
-            <p>{examples.generalAssessment.original}</p>
-          </div>
+      {/* Analysis cards */}
+      <div className="mt-12 border-t border-gray-200 dark:border-gray-700 pt-6">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+          AI Analysis
+        </h3>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
-            <h4 className="text-blue-700 dark:text-blue-300 text-sm font-medium mb-2">
-              AI Suggestion
-            </h4>
-            <p className="text-gray-800 dark:text-gray-200">
-              {examples.generalAssessment.improved}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="flex flex-col items-center bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <ProgressCircle value={improved ? 88 : 65} size="md" color="blue" />
+            <h4 className="text-lg font-medium mt-4">Clarity Score</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">
+              {improved
+                ? "Clearer phrasing and stronger verbs."
+                : "Paste your LOR to analyze clarity."}
             </p>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              onClick={() => handleDecline("general assessment")}
-              variant="outline"
-              size="sm"
-            >
-              Decline
-            </Button>
-            <Button
-              onClick={() => handleAcceptSuggestion("general assessment")}
-              variant="default"
-              size="sm"
-            >
-              Accept Suggestion
-            </Button>
-          </div>
-        </div>
-
-        {/* Comparison with Peers Section */}
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-          <h3 className="text-lg font-medium mb-2">Comparison with Peers</h3>
-
-          <div className="border border-gray-200 dark:border-gray-700 rounded p-3 mb-4">
-            <p>{examples.comparisonWithPeers.original}</p>
-          </div>
-
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
-            <h4 className="text-blue-700 dark:text-blue-300 text-sm font-medium mb-2">
-              AI Suggestion
-            </h4>
-            <p className="text-gray-800 dark:text-gray-200">
-              {examples.comparisonWithPeers.improved}
+          <div className="flex flex-col items-center bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <ProgressCircle
+              value={improved ? 72 : 58}
+              size="md"
+              color="purple"
+            />
+            <h4 className="text-lg font-medium mt-4">Distinctiveness</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">
+              {improved
+                ? "More concrete, specific evidence of impact."
+                : "Add details for a stronger distinctiveness score."}
             </p>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              onClick={() => handleDecline("comparison with peers")}
-              variant="outline"
-              size="sm"
-            >
-              Decline
-            </Button>
-            <Button
-              onClick={() => handleAcceptSuggestion("comparison with peers")}
-              variant="default"
-              size="sm"
-            >
-              Accept Suggestion
-            </Button>
+          <div className="flex flex-col items-center bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <ProgressCircle
+              value={improved ? 90 : 70}
+              size="md"
+              color="green"
+            />
+            <h4 className="text-lg font-medium mt-4">Credibility</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">
+              {improved
+                ? "Tone is formal, balanced, and credible."
+                : "Use specific roles, dates, and outcomes."}
+            </p>
           </div>
-        </div>
-
-        <div className="flex justify-center mt-4">
-          <Button
-            onClick={handleSaveChanges}
-            className="bg-teal-500 hover:bg-teal-600"
-          >
-            Save All Changes
-          </Button>
         </div>
       </div>
     </div>
   );
 };
 
-export default AIImprovement;
+export default LORImprovement;
