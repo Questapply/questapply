@@ -815,6 +815,8 @@ router.get("/prefill", authenticateToken, async (req, res) => {
     return res
       .status(500)
       .json({ message: "Failed to prefill.", error: err?.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -924,26 +926,24 @@ router.get("/resume/:resumeId", authenticateToken, async (req, res) => {
         .json({ message: "Resume not found or not owned by user." });
     }
 
-    // 3) آن‌رب محتوا
     const sections = {};
     for (const r of rows) {
       let val = r.content;
       if (typeof val === "string") {
         const parsed = tryParseJSON(val);
         if (parsed && typeof parsed === "object") {
-          // حالت قدیمی: {"title":"...","content": ...} یا مستقیماً آبجکت محتوا
           if ("content" in parsed) {
-            sections[r.section] = parsed.content; // فقط محتوا
+            sections[r.section] = parsed.content;
           } else {
-            sections[r.section] = parsed; // خود آبجکت محتوا
+            sections[r.section] = parsed;
           }
         } else {
-          sections[r.section] = val; // متن ساده
+          sections[r.section] = val;
         }
       } else if (val && typeof val === "object") {
-        sections[r.section] = val; // به ندرت: اگر DB json-type باشد
+        sections[r.section] = val;
       } else {
-        sections[r.section] = ""; // خالی
+        sections[r.section] = "";
       }
     }
 
@@ -1003,14 +1003,12 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
         .json({ message: "Unauthorized: User ID not found." });
     }
 
-    // 2) تعیین resumeId (فقط وقتی جدید است UUID بساز)
     const currentResumeId =
       resume_id && resume_id !== "new_resume_placeholder"
         ? resume_id
         : uuidv4();
 
-    // ⚠️ template_id اختیاری است؛ اگر نیاید، چیزی را اووررایت نکنیم
-    const tplToSet = typeof template_id === "number" ? template_id : null; // فقط وقتی عدد است
+    const tplToSet = typeof template_id === "number" ? template_id : null;
 
     await connection.beginTransaction();
 
@@ -1018,7 +1016,6 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
     for (const sectionId of Object.keys(sections)) {
       const payload = sections[sectionId];
 
-      // --- حذف: اگر payload === null، رکورد را حذف کن و برو بعدی
       if (payload === null) {
         await connection.execute(
           `DELETE FROM qacom_wp_user_resume
@@ -1028,7 +1025,6 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
         continue;
       }
 
-      // --- نرمال‌سازی content: همانی که فرانت نشان می‌دهد را ذخیره کن
       let dbContent;
       if (typeof payload === "string") {
         dbContent = payload;
@@ -1041,17 +1037,15 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
           dbContent = JSON.stringify(inner || {});
         }
       } else {
-        dbContent = ""; // اگر چیزی نبود، متن خالی
+        dbContent = "";
       }
 
-      // آیا قبلاً این سکشن ذخیره شده؟
       const [existing] = await connection.execute(
         `SELECT 1 FROM qacom_wp_user_resume WHERE user_id=? AND resume_id=? AND section=?`,
         [userId, currentResumeId, sectionId]
       );
 
       if (existing.length) {
-        // ⚠️ template_id را فقط وقتی در این درخواست داده شده آپدیت کن
         if (tplToSet !== null) {
           await connection.execute(
             `UPDATE qacom_wp_user_resume
@@ -1068,7 +1062,6 @@ router.post("/save-resume", authenticateToken, async (req, res) => {
           );
         }
       } else {
-        // درج رکورد جدید برای همین سکشن
         await connection.execute(
           `INSERT INTO qacom_wp_user_resume
              (resume_id, user_id, template_id, section, content, created_at)
@@ -1399,7 +1392,6 @@ router.post("/export", authenticateToken, async (req, res) => {
       .filter(Boolean)
       .join(" | ");
 
-    // تبدیل محتوا به متن خوانا (object → text)
     const S = {
       summary: clean(textFromItemList(sections.summary) || sections.summary),
       interests: clean(

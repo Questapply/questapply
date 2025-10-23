@@ -22,7 +22,6 @@ async function getUserIdByEmail(email) {
   return urows?.[0]?.ID || null;
 }
 
-// مبلغ/ارز را براساس intent امن محاسبه کن
 async function computeAmountForIntent({ intent, userId, resourceId, credits }) {
   if (intent === "psu_submission") {
     if (!resourceId) throw new Error("Missing relId for psu_submission");
@@ -239,7 +238,6 @@ router.post("/payments/session", authenticateToken, async (req, res) => {
   }
 });
 
-// --- (اختیاری) Capture بعد از برگشت کاربر ---
 router.post(
   "/payments/:paymentId/capture",
   authenticateToken,
@@ -303,7 +301,7 @@ router.post(
       if (!verified) return res.status(400).send("Invalid signature");
 
       const event = req.body;
-      // ما روی PAYMENT.CAPTURE.COMPLETED عمل می‌کنیم
+
       if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") {
         const capture = event.resource;
         const orderId = capture?.supplementary_data?.related_ids?.order_id;
@@ -311,7 +309,6 @@ router.post(
         const amount = capture?.amount?.value;
         const currency = capture?.amount?.currency_code;
 
-        // پیدا کردن رکورد پرداخت
         const [rows] = await db.query(
           `SELECT * FROM qacom_payments WHERE provider_order_id=? LIMIT 1`,
           [orderId]

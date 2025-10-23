@@ -223,7 +223,7 @@ function parseList(val) {
     }
   }
   if (typeof val === "object" && val) {
-    // آرایه‌نما؟
+  
     const keys = Object.keys(val);
     if (keys.length && keys.every((k) => String(+k) === k)) {
       return keys.sort((a, b) => +a - +b).map((k) => val[k]);
@@ -244,7 +244,7 @@ async function sendEmail({ to, subject, text, html }) {
    Helper: robust insert into recommender requests
    - Tries with `created_at`, falls back to `created`
    ========================================================= */
-// در lorRoutes.js جایگزین کن
+
 async function insertRecommenderRequest({
   userId,
   teacherId,
@@ -558,147 +558,6 @@ router.post("/lor/generate", authenticateToken, async (req, res) => {
 /* =========================================================
    5) Export (txt/pdf/docx)
    ========================================================= */
-// router.post("/lor/export", authenticateToken, async (req, res) => {
-//   try {
-//     const userId = await resolveUserId(req);
-//     const { format, title = "LOR" } = req.body || {};
-//     if (!["txt", "pdf", "docx"].includes(format))
-//       return res.status(400).json({ message: "Invalid format" });
-
-//     const normalizeSections = (input) => {
-//       if (!input) return null;
-//       if (Array.isArray(input))
-//         return input.map((s) => ({
-//           title: (s?.title ?? "").toString().trim() || "Untitled",
-//           content: (s?.content ?? "").toString(),
-//         }));
-//       if (typeof input === "object")
-//         return Object.values(input).map((s) => ({
-//           title: (s?.title ?? "").toString().trim() || "Untitled",
-//           content: (s?.content ?? "").toString(),
-//         }));
-//       return null;
-//     };
-
-//     let structured = normalizeSections(req.body?.sections);
-//     if (!structured) {
-//       const tmp = [];
-//       for (const slug of LOR_SECTIONS) {
-//         const meta = await readUserMeta(userId, toMetaKey(slug, false));
-//         const content = lorMetaToPlain(slug, meta);
-//         tmp.push({ title: slug.replace(/-/g, " "), content });
-//       }
-//       structured = tmp;
-//     }
-
-//     const content =
-//       typeof req.body?.content === "string" && req.body.content.trim()
-//         ? req.body.content
-//         : structured
-//             .map(
-//               (s) =>
-//                 `${(s.title || "Untitled").toUpperCase()}\n${(s.content || "")
-//                   .toString()
-//                   .trim()}\n`
-//             )
-//             .join("\n");
-
-//     const userDir = path.join(UPLOAD_BASE_DIR, `docs-${userId}`);
-//     ensureDir(userDir);
-//     const baseName = `${title.replace(/[^\w\-]+/g, "_")}-lor`;
-//     let filePath = "";
-
-//     if (format === "txt") {
-//       filePath = path.join(userDir, `${baseName}.txt`);
-//       fs.writeFileSync(filePath, content, "utf8");
-//     }
-
-//     if (format === "pdf") {
-//       const PDFDocument = (await import("pdfkit")).default;
-//       filePath = path.join(userDir, `${baseName}.pdf`);
-//       const pdf = new PDFDocument({ margin: 50, size: "A4" });
-//       const stream = fs.createWriteStream(filePath);
-//       pdf.pipe(stream);
-
-//       structured.forEach((sec, idx) => {
-//         const titleText = (sec.title || "Untitled").trim();
-//         const bodyText = (sec.content || "").toString().trim();
-
-//         pdf.font("Helvetica-Bold").fontSize(14).fillColor("#111827");
-//         pdf.text(titleText);
-//         pdf.moveDown(0.35);
-
-//         pdf.font("Helvetica").fontSize(11).fillColor("#111827");
-//         pdf.text(bodyText || " ", { align: "justify" });
-
-//         if (idx < structured.length - 1) {
-//           pdf.moveDown(0.6);
-//           const x1 = pdf.page.margins.left;
-//           const x2 = pdf.page.width - pdf.page.margins.right;
-//           const y = pdf.y + 2;
-//           pdf
-//             .save()
-//             .moveTo(x1, y)
-//             .lineTo(x2, y)
-//             .lineWidth(0.5)
-//             .strokeColor("#e5e7eb")
-//             .stroke()
-//             .restore();
-//           pdf.moveDown(0.6);
-//         }
-//       });
-
-//       pdf.end();
-//       await new Promise((resolve, reject) => {
-//         stream.on("finish", resolve);
-//         stream.on("error", reject);
-//       });
-//     }
-
-//     if (format === "docx") {
-//       const { Document, Packer, Paragraph, HeadingLevel } = await import(
-//         "docx"
-//       );
-//       filePath = path.join(userDir, `${baseName}.docx`);
-//       const children = [];
-//       structured.forEach((sec, idx) => {
-//         const titleText = (sec.title || "Untitled").trim();
-//         const bodyText = (sec.content || "").toString();
-//         children.push(
-//           new Paragraph({ text: titleText, heading: HeadingLevel.HEADING_2 })
-//         );
-//         (bodyText || " ")
-//           .split("\n")
-//           .forEach((ln) => children.push(new Paragraph(ln.trim())));
-//         if (idx < structured.length - 1) children.push(new Paragraph(""));
-//       });
-//       const doc = new Document({ sections: [{ children }] });
-//       const buf = await Packer.toBuffer(doc);
-//       fs.writeFileSync(filePath, buf);
-//     }
-
-//     const stat = fs.statSync(filePath);
-//     const filename = path.basename(filePath);
-//     const mime =
-//       format === "pdf"
-//         ? "application/pdf"
-//         : format === "docx"
-//         ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-//         : "text/plain; charset=utf-8";
-
-//     const url = `${UPLOAD_BASE_URL}/docs-${userId}/${filename}`;
-//     if (format === "pdf") await writeUserMeta(userId, "lor_dl_pdf", url);
-//     if (format === "docx") await writeUserMeta(userId, "lor_dl_word", url);
-
-//     res.setHeader("Content-Type", mime);
-//     res.setHeader("Content-Length", stat.size);
-//     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-//     fs.createReadStream(filePath).pipe(res);
-//   } catch (e) {
-//     console.error("POST /lor/export error:", e);
-//     res.status(500).json({ message: "Failed to export LOR." });
-//   }
-// });
 
 router.post("/lor/export", authenticateToken, async (req, res) => {
   try {

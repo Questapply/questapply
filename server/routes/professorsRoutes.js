@@ -135,7 +135,6 @@ router.get("/find", authenticateToken, async (req, res) => {
       const cached = getCache(cacheKey);
       if (cached) {
         userPreferences = cached;
-        // از کش نمی‌توان برنامهٔ area را به‌طور مستقیم گرفت؛ اما همان خروجی حفظ می‌شود
       } else {
         const preferredMetaKeys = [
           "application_country",
@@ -288,7 +287,6 @@ router.get("/find", authenticateToken, async (req, res) => {
       return base;
     })();
 
-    /* شروط: همان WHERE/ORDER BY قبلی؛ EXISTSها حفظ شده اما JOIN تصویر بهینه شده */
     const bsResearch = booleanSearch(filters.researchInterest);
 
     const whereParts = [`pf.status = 'publish'`];
@@ -351,7 +349,6 @@ router.get("/find", authenticateToken, async (req, res) => {
     console.log("[find] SQL where =", whereParts.join(" AND "));
     console.log("[find] params =", idsParams);
 
-    /* IDs و COUNT: همان رفتار قبلی (COUNT همیشه انجام می‌شود) */
     const baseIdsPromise = db.query(
       `
       SELECT pf.ID
@@ -396,7 +393,6 @@ router.get("/find", authenticateToken, async (req, res) => {
       return res.send(JSON.stringify(payload));
     }
 
-    /* دیتیل + ریسرچ + روابط: تصویر را با LEFT JOIN بیاور (بدون تغییر در فیلد خروجی) */
     const detailsPromise = db.query(
       `
       SELECT DISTINCT 
@@ -467,9 +463,6 @@ router.get("/find", authenticateToken, async (req, res) => {
       relRowsPromise,
     ]);
 
-    /* تصاویر: الان از detailsRows.image_url تأمین می‌شود */
-    // (هیچ تغییری در فیلد خروجی image نمی‌دهیم)
-
     /* Research interests (unique): همان regex قبلی */
     const interests = [];
     const re = /s:\d+:"(.*?)";/g;
@@ -480,7 +473,7 @@ router.get("/find", authenticateToken, async (req, res) => {
     }
     const researchInterests = Array.from(new Set(interests)).sort();
 
-    /* category programs: دقیقاً مثل قبل (پر و گروه‌بندی می‌شود) */
+    /* category programs: */
     const categoryForPrograms =
       (filters.areaOfStudy.length ? filters.areaOfStudy[0] : null) ||
       (userPreferences?.areaOfStudy && userPreferences.areaOfStudy.id) ||

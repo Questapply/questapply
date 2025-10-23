@@ -146,78 +146,7 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-// API endpoint for login
-// router.post("/login", async (req, res) => {
-//   const { email, password } = req.body;
 
-//   try {
-//     const [users] = await db.query(
-//       `
-//       SELECT id, user_email, user_pass
-//       FROM qacom_wp_users
-//       WHERE user_email = ?`,
-//       [email]
-//     );
-
-//     if (!users || users.length === 0) {
-//       return res.status(401).json({ error: "Invalid email or password" });
-//     }
-
-//     const user = users[0];
-
-//     const userId = user.ID || user.id;
-
-//     if (!userId) {
-//       return res
-//         .status(500)
-//         .json({ error: "User ID not found in database response" });
-//     }
-
-//     const isPasswordValid = wordpressHash.CheckPassword(
-//       password,
-//       user.user_pass
-//     );
-
-//     if (!isPasswordValid) {
-//       return res.status(401).json({ error: "Invalid email or password" });
-//     }
-
-//     const [userMetas] = await db.query(
-//       `SELECT meta_key, meta_value FROM qacom_wp_usermeta WHERE user_id = ? AND meta_key IN ('profile_education', 'application_country', 'application_level', 'application_english_test')`,
-//       [user.id]
-//     );
-
-//     const metaData = {};
-//     userMetas.forEach((meta) => {
-//       metaData[meta.meta_key] = meta.meta_value;
-//     });
-
-//     const requiredMetaKeys = [
-//       "profile_education",
-//       "application_country",
-//       "application_level",
-//       "application_english_test",
-//     ];
-//     const isProfileComplete = requiredMetaKeys.every(
-//       (key) => metaData[key] && metaData[key] !== ""
-//     );
-
-//     const token = jwt.sign({ email: user.user_email }, JWT_SECRET, {
-//       expiresIn: "1h",
-//     });
-
-//     res.json({
-//       message: "Login successful",
-//       token,
-//       user: { email: user.user_email },
-//       isProfileComplete,
-//     });
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ error: "Internal server error", details: error.message });
-//   }
-// });
 
 // API endpoint for signup
 router.post("/signup", async (req, res) => {

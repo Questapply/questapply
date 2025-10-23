@@ -51,6 +51,11 @@ export async function getResume(resumeId: string) {
   const res = await fetch(`${BASE}/resume/${resumeId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 404) {
+    const err: any = new Error("NotFound");
+    err.status = 404;
+    throw err;
+  }
   if (!res.ok) throw new Error("Failed to fetch resume");
   return res.json();
 }

@@ -170,7 +170,6 @@ const StudyGoals: React.FC<StudyGoalsProps> = ({ onNext, data }) => {
   const fieldSearchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    // ✅ Country: هم با id هم با name کار می‌کند
     const nextCountryId = findCountryId(data.country);
     if (nextCountryId) setCountryId(nextCountryId);
 

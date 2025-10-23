@@ -495,7 +495,10 @@ async function ensureResumeIdUtil(
   };
   const res = await saveResume(payload, null);
   const savedId = (res as any)?.id || (res as any)?.new_resume_id || null;
-  if (savedId) setResumeId(savedId);
+  if (savedId) {
+    setResumeId(savedId);
+    localStorage.setItem("currentResumeId", savedId);
+  }
   return savedId;
 }
 
@@ -527,40 +530,98 @@ export default function ResumeEditor({
   const [target, setTarget] = useState<string | undefined>(targetBadge);
   const [country, setCountry] = useState<string | undefined>(countryBadge);
   const baselineRef = React.useRef<SectionsShape | null>(null);
+
+  //////////////////////
+  // useEffect(() => {
+  //   let canceled = false;
+  //   async function run() {
+  //     try {
+  //       if (resumeId) {
+  //         const data = await getResume(resumeId);
+  //         if (canceled) return;
+
+  //         // ⬅️ به‌جای initialSections از baseline استفاده کن
+  //         const base = baselineRef.current ?? initialSections;
+  //         const merged = mergeFromApiSections(base, data?.sections);
+
+  //         setSections(merged);
+  //         // ⬅️ baseline را هم آپدیت کن تا دفعه‌های بعدی هم همین رفتار حفظ شود
+  //         baselineRef.current = merged;
+
+  //         const ctx = data?.context || {};
+  //         if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
+  //         if (!countryBadge && ctx?.country) setCountry(ctx.country);
+  //       } else {
+  //         const data = await prefillResume();
+  //         if (canceled) return;
+
+  //         const merged = mergeFromApiSections(initialSections, data?.sections);
+  //         setSections(merged);
+
+  //         // ⬅️ اولین بار baseline از روی prefill پر می‌شود
+  //         baselineRef.current = merged;
+
+  //         const ctx = data?.context || {};
+  //         if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
+  //         if (!countryBadge && ctx?.country) setCountry(ctx.country);
+  //       }
+  //     } catch (e: any) {
+  //       console.error("load (resume/prefill) failed", e);
+  //       toast({
+  //         title: "Load failed",
+  //         description: e?.message ?? "Failed to load data.",
+  //         variant: "destructive",
+  //       });
+  //     }
+  //   }
+  //   run();
+  //   return () => {
+  //     canceled = true;
+  //   };
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [resumeId, initialSections, setSections]);
+  ///////////////////////
+  useEffect(() => {
+    if (!resumeId) {
+      const last = localStorage.getItem("currentResumeId");
+      if (last) setResumeId(last);
+    }
+  }, [resumeId, setResumeId]);
+
   useEffect(() => {
     let canceled = false;
+
+    async function loadPrefill() {
+      const data = await prefillResume();
+      if (canceled) return;
+      const merged = mergeFromApiSections(initialSections, data?.sections);
+      setSections(merged);
+      baselineRef.current = merged; // ← پایهٔ جدید
+      const ctx = data?.context || {};
+      if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
+      if (!countryBadge && ctx?.country) setCountry(ctx.country);
+    }
+
     async function run() {
       try {
         if (resumeId) {
+          // اگر id داریم فقط از DB بخوان
           const data = await getResume(resumeId);
           if (canceled) return;
 
-          // ⬅️ به‌جای initialSections از baseline استفاده کن
           const base = baselineRef.current ?? initialSections;
           const merged = mergeFromApiSections(base, data?.sections);
-
           setSections(merged);
-          // ⬅️ baseline را هم آپدیت کن تا دفعه‌های بعدی هم همین رفتار حفظ شود
           baselineRef.current = merged;
 
           const ctx = data?.context || {};
           if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
           if (!countryBadge && ctx?.country) setCountry(ctx.country);
         } else {
-          const data = await prefillResume();
-          if (canceled) return;
-
-          const merged = mergeFromApiSections(initialSections, data?.sections);
-          setSections(merged);
-
-          // ⬅️ اولین بار baseline از روی prefill پر می‌شود
-          baselineRef.current = merged;
-
-          const ctx = data?.context || {};
-          if (!targetBadge && ctx?.target_level) setTarget(ctx.target_level);
-          if (!countryBadge && ctx?.country) setCountry(ctx.country);
+          await loadPrefill();
         }
       } catch (e: any) {
+        // ⬅️ دیگر به prefill برنگرد؛ فقط ارور بده
         console.error("load (resume/prefill) failed", e);
         toast({
           title: "Load failed",
@@ -569,6 +630,7 @@ export default function ResumeEditor({
         });
       }
     }
+
     run();
     return () => {
       canceled = true;
@@ -637,7 +699,10 @@ export default function ResumeEditor({
       const res = await saveResume(payload, ensuredId ?? null);
       const savedId =
         (res as any)?.id || (res as any)?.new_resume_id || ensuredId || null;
-      if (savedId && !resumeId) setResumeId(savedId);
+      if (savedId && !resumeId) {
+        setResumeId(savedId);
+        localStorage.setItem("currentResumeId", savedId);
+      }
 
       toast({ title: "Saved", description: `Section "${sectionKey}" saved.` });
     } catch (e: any) {
@@ -700,7 +765,11 @@ export default function ResumeEditor({
       const res = await saveResume(buildPayload(), ensuredId ?? null);
       const savedId =
         (res as any)?.id || (res as any)?.new_resume_id || ensuredId || null;
-      if (savedId) setResumeId(savedId);
+      if (savedId) {
+        setResumeId(savedId);
+        localStorage.setItem("currentResumeId", savedId);
+        baselineRef.current = sections;
+      }
       toast({
         title: "Saved",
         description: "Resume saved to My Documents → Resumes.",
@@ -778,8 +847,12 @@ export default function ResumeEditor({
       const ensuredId = await ensureResumeIdUtil(
         selectedTemplateId,
         resumeId,
-        setResumeId
+        (id) => {
+          setResumeId(id);
+          if (id) localStorage.setItem("currentResumeId", id);
+        }
       );
+      await saveResume(buildPayload(), ensuredId ?? resumeId);
       const t = selectedTemplateId ?? undefined;
       navigate(
         `/dashboard/resume/preview/${ensuredId || resumeId}${

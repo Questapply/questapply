@@ -629,9 +629,7 @@ router.get("/meta", authenticateToken, async (req, res) => {
 });
 
 // POST /api/sop-data/meta
-// ورودی پذیرفته‌شده:
-// 1) { sections: {hook:{title,content}, ...} }  ← توصیه‌شده
-// 2) { section:"hook", selects:{}, inputs:{} }  ← سازگاری با قدیمی
+
 router.post("/meta", authenticateToken, async (req, res) => {
   try {
     const userId = await resolveUserId(req);

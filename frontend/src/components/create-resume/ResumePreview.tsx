@@ -25,14 +25,8 @@ export default function ResumePreview() {
     setLoading(true);
     setErr(null);
     setInfo(null);
-    setHtmlDoc(null);
-    setBlobUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setMime(null);
 
-    const body: any = { resume_id: id, format: "html" }; // ← فقط HTML برای Preview
+    const body: any = { resume_id: id, format: "html" }; // فقط HTML برای پیش‌نمایش
     if (typeof templateId === "number") body.template_id = templateId;
 
     try {
@@ -42,7 +36,6 @@ export default function ResumePreview() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          // HTML را ترجیح می‌دهیم؛ اگر سرور PDF داد هم قابل نمایش است
           Accept: "text/html, application/pdf, */*",
         },
         body: JSON.stringify(body),
@@ -62,31 +55,56 @@ export default function ResumePreview() {
 
       if (ct.includes("text/html")) {
         const html = await resp.text();
-        setHtmlDoc(html);
+        // فقط الان (بعد از موفقیت) قبلی رو آزاد/جایگزین کن
+        setBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
         setMime("text/html");
+        setHtmlDoc(html);
+        sessionStorage.setItem(`preview:${id}`, html); // کش HTML
         return;
       }
 
       if (ct.includes("application/pdf")) {
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
-        setBlobUrl(url);
+        setHtmlDoc(null);
         setMime("application/pdf");
+        setBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        sessionStorage.removeItem(`preview:${id}`);
         return;
       }
 
-      // فرمت‌های دیگر را برای Preview نمایش نمی‌دهیم
       setInfo("Preview تنها برای HTML/PDF پشتیبانی می‌شود.");
     } catch (e: any) {
-      setErr(e?.message ?? "Failed to load preview");
+      // در خطا، اگر کش HTML داریم، همان را نشان بده
+      const cached = sessionStorage.getItem(`preview:${id}`);
+      if (cached) {
+        setMime("text/html");
+        setHtmlDoc(cached);
+        setErr(null);
+      } else {
+        setErr(e?.message ?? "Failed to load preview");
+      }
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    const cached = id ? sessionStorage.getItem(`preview:${id}`) : null;
+    if (cached) {
+      setMime("text/html");
+      setHtmlDoc(cached);
+    }
+
     const ac = new AbortController();
     fetchPreview(ac.signal);
+
     return () => {
       ac.abort();
       setBlobUrl((prev) => {
