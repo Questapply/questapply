@@ -52,7 +52,7 @@ type Props = {
   showNone?: boolean; // default: false => None نمایش داده نمی‌شود
 };
 
-const clamp = (s?: string, n = 20) =>
+const clamp = (s?: string, n = 17) =>
   (s?.trim()?.length || 0) > n ? `${s!.trim().slice(0, n)}…` : s || "";
 
 function normalizeOptions(options: FDOption[]) {
@@ -223,53 +223,25 @@ const FilterDropdown: React.FC<Props> = ({
             >
               {icon && <span className="shrink-0">{icon}</span>}
               <span
-                className="truncate text-left min-w-0 max-w-[160px] sm:max-w-[140px] md:max-w-[140px]"
+                className="truncate text-left min-w-0 max-w-[140px] sm:max-w-[140px] md:max-w-[140px]"
                 title={buttonLabel}
               >
                 {buttonLabel}
               </span>
-              {/*
-  محاسبات فشرده‌سازی فاصله‌ها
-*/}
-              {(() => {
-                const hasBadge = showCount && isMulti && selectionCount > 0;
-                const hasClear = selectionCount > 0;
-                const isSingle = !isMulti;
 
-                // حداقل فضا: سینگل کمترین، مولتی کمی بیشتر، بدون هیچ‌چیز صفر
-                const rightMinWClass = hasBadge
-                  ? "min-w-[40px]" // وقتی badge داریم (فقط در مولتی)
-                  : hasClear
-                  ? isSingle
-                    ? "min-w-[24px]"
-                    : "min-w-[32px]"
-                  : "min-w-0";
-
-                const chevronMargin = hasBadge || hasClear ? "ml-1" : "ml-0.5";
-
-                return (
+              <span className="shrink-0 flex items-center justify-end gap-1 min-w-0">
+                {showCount && isMulti && selectionCount > 0 && (
                   <span
-                    className={cn(
-                      "shrink-0 flex items-center justify-end gap-1",
-                      rightMinWClass
-                    )}
+                    className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border
+                 bg-sky-200 text-sky-900 border-sky-200
+                 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/40"
                   >
-                    {hasBadge && (
-                      <span
-                        className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full border-2
-          bg-sky-200 text-sky-900 border-sky-200
-          dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/40"
-                      >
-                        {selectionCount}
-                      </span>
-                    )}
-
-                    <ChevronsUpDown
-                      className={cn("h-3.5 w-3.5 shrink-0", chevronMargin)}
-                    />
+                    {selectionCount}
                   </span>
-                );
-              })()}
+                )}
+
+                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 ml-0.5" />
+              </span>
             </motion.button>
           </DropdownMenuTrigger>
 

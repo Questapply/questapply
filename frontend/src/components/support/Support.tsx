@@ -28,6 +28,7 @@ import {
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
+import NavigationButtons from "../layout/NavigationButtons";
 
 const Support = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -194,7 +195,8 @@ const Support = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
-      <div className="space-y-8">
+      <NavigationButtons isDarkMode={isDarkMode} />
+      <div className="space-y-8 mt-4 md:mt-7">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -207,7 +209,7 @@ const Support = () => {
             </h1>
             <div className="flex items-center space-x-4">
               {/* Theme toggle switch */}
-              <div className="flex items-center space-x-2">
+              {/* <div className="flex items-center space-x-2">
                 <Sun
                   className={`w-5 h-5 ${
                     isDarkMode ? "text-gray-400" : "text-yellow-500"
@@ -223,7 +225,7 @@ const Support = () => {
                     isDarkMode ? "text-blue-400" : "text-gray-400"
                   }`}
                 />
-              </div>
+              </div> */}
             </div>
           </div>
           <p className="text-gray-600 dark:text-gray-300">

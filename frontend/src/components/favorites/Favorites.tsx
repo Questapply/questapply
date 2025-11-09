@@ -10,6 +10,7 @@ import ProgramResultCard, {
   Program as ProgType,
 } from "@/components/find-programs/ProgramResultCard";
 import SchoolCard from "@/components/find-schools/SchoolCard";
+import NavigationButtons from "../layout/NavigationButtons";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -309,7 +310,8 @@ const Favorites: React.FC = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
-      <div className="space-y-8">
+      <NavigationButtons isDarkMode={isDarkMode} />
+      <div className="space-y-8 mt-5 md:mt-7">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -25,6 +25,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import ConfirmRemoveDialog from "./ConfirmRemoveDialog";
+import ChatPanel from "./ChatPanel";
 
 /* --- انواع و توابع اصلیِ خودت بدون تغییر --- */
 type Season = "fall" | "spring" | "winter" | "summer";
@@ -336,10 +337,6 @@ function parseEarliestDeadline(deadline: unknown): number {
   }
   return Number.POSITIVE_INFINITY;
 }
-
-/* ============================ */
-/*     ApplyNow Component       */
-/* ============================ */
 
 const ApplyNow = () => {
   const navigate = useNavigate();
@@ -691,9 +688,13 @@ const ApplyNow = () => {
   };
 
   return (
-    <div className="  p-6 animate-fade-in bg-gray-100 dark:bg-[#0b1020] min-h-screen">
+    <div
+      className="p-3 animate-fade-in min-h-screen
+                  bg-slate-50 dark:bg-slate-900"
+    >
       <motion.h1
-        className="text-2xl font-bold text-gray-100 mb-6"
+        className="text-2xl font-bold mb-6
+                 text-slate-900 dark:text-slate-100"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -711,32 +712,39 @@ const ApplyNow = () => {
       {/* گرید: ۱/۳ چت + ۲/۳ محتوای فعلی */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
         {/* 1/3 — Chat (کاملاً مستقل) */}
-        <aside className="lg:col-span-1 min-w-0 ">
+        <aside className="lg:col-span-1 min-w-0">
           <ChatPanel />
         </aside>
 
-        {/* 2/3 — همـان محتوای فعلی (loading/error/table) بدون تغییر منطق */}
-        <section className="lg:col-span-2 min-w-0  ">
+        {/* 2/3 — محتوای فعلی */}
+        <section className="lg:col-span-2 min-w-0">
           {loading && <LoadingSkeleton type="skeleton" count={5} />}
-          {error && <p className="text-red-400">Error: {error}</p>}
+          {error && (
+            <p className="text-red-500 dark:text-red-400">Error: {error}</p>
+          )}
 
           {!loading && !error && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="w-full rounded-xl border border-[#25324a] bg-gray-200 dark:bg-[#111827] overflow-hidden"
+              className="w-full rounded-xl border overflow-hidden
+                       bg-white border-slate-200
+                       dark:bg-slate-900 dark:border-slate-700"
             >
               <Table className="table-fixed md:w-full">
                 <TableHeader>
-                  <TableRow className="hidden md:table-row  dark:bg-gray-900/40 bg-gray-300 ">
-                    <TableHead className="font-medium  md:w-1/3">
+                  <TableRow
+                    className="hidden md:table-row
+                                     bg-slate-100 dark:bg-slate-800/60"
+                  >
+                    <TableHead className="font-medium md:w-1/3">
                       Program
                     </TableHead>
-                    <TableHead className="font-medium  md:w-[100px] text-center ">
+                    <TableHead className="font-medium md:w-[100px] text-center">
                       Deadline
                     </TableHead>
-                    <TableHead className="font-medium text-center md:w-[70px] ">
+                    <TableHead className="font-medium md:w-[70px] text-center">
                       Fees
                     </TableHead>
                     <TableHead className="font-medium md:w-[80px] text-center">
@@ -745,7 +753,7 @@ const ApplyNow = () => {
                     <TableHead className="font-medium md:w-[120px] text-center">
                       Admission Fit
                     </TableHead>
-                    <TableHead className="font-medium text-center md:w-[120px]">
+                    <TableHead className="font-medium md:w-[120px] text-center">
                       Status
                     </TableHead>
                     <TableHead className="font-medium">Actions</TableHead>
@@ -754,7 +762,11 @@ const ApplyNow = () => {
                 <TableBody>
                   {visibleApplications.length === 0 ? (
                     <TableRow>
-                      <td colSpan={7} className="text-center py-8">
+                      <td
+                        colSpan={7}
+                        className="text-center py-8
+                                              text-slate-600 dark:text-slate-300"
+                      >
                         No programs match your filters.
                       </td>
                     </TableRow>
@@ -783,7 +795,7 @@ const ApplyNow = () => {
         </section>
       </div>
 
-      {/* Dialogs — مثل قبل در ریشه (بدون تغییر) */}
+      {/* Dialogs — بدون تغییر */}
       <ApplyYourselfDialog
         open={applyYourselfOpen}
         onOpenChange={setApplyYourselfOpen}
@@ -815,123 +827,3 @@ const ApplyNow = () => {
 };
 
 export default ApplyNow;
-
-/* ============================= */
-/*      ChatPanel (Standalone)   */
-/* ============================= */
-
-function ChatPanel() {
-  const [messages, setMessages] = useState<
-    Array<{ role: "me" | "ai"; text: string }>
-  >([
-    {
-      role: "ai",
-      text: "Hi! I can help with deadlines, fees, and required documents for each program.",
-    },
-  ]);
-  const [value, setValue] = useState("");
-  const endRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const send = () => {
-    const v = value.trim();
-    if (!v) return;
-    setMessages((m) => [...m, { role: "me", text: v }]);
-    setValue("");
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "ai",
-          text: `✅ Noted: "${v}". I can draft a checklist or show closest deadlines.`,
-        },
-      ]);
-    }, 500);
-  };
-
-  const quick = (label: string) => {
-    setMessages((m) => [
-      ...m,
-      { role: "ai", text: `⏩ ${label} — here’s what I recommend next…` },
-    ]);
-  };
-
-  return (
-    <div className="rounded-xl border dark:border-[#25324a] bg-gray-200 border-gray-300 dark:bg-[#111827] flex flex-col h-screen lg:h-[calc(100vh-220px)]">
-      {/* header small */}
-      <div className="p-3 md:p-4 border-b border-[#25324a] flex items-center justify-between">
-        <Badge className="dark:bg-[#0b213a] border-[#25324a] text-[11px] bg-yellow-50 text-gray-900 dark:text-gray-100">
-          Apply • Assistant
-        </Badge>
-        <span className="text-xs dark:text-[#9ca3af] text-gray-900">
-          Draft v1 • Helper
-        </span>
-      </div>
-
-      {/* messages */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2.5">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`flex ${
-              m.role === "me" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[82%] md:max-w-[75%] rounded-lg  border border-[#25324a] px-3 py-2 text-[13px] md:text-sm ${
-                m.role === "me"
-                  ? "bg-[#7c3aed26]"
-                  : "bg-gray-100 dark:bg-[#0e1526]"
-              }`}
-            >
-              {m.text}
-            </div>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
-
-      {/* quick actions */}
-      <div className="px-3 md:px-4 pb-2 space-x-1.5">
-        {[
-          "Build docs checklist",
-          "Show closest deadlines",
-          "Estimate fees",
-        ].map((q) => (
-          <Button
-            key={q}
-            size="sm"
-            variant="outline"
-            className="h-8 px-2.5 text-[12px] bg-gray-100 dark:bg-[#0e1526] border-[#25324a] text-gray-900 dark:text-[#9ca3af]"
-            onClick={() => quick(q)}
-          >
-            {q}
-          </Button>
-        ))}
-      </div>
-
-      {/* input */}
-      <div className="p-3 md:p-4 border-t border-[#25324a]">
-        <div className="flex gap-2">
-          <Input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder='Ask e.g. "What do I need for Stanford CS?"'
-            className="flex-1 h-9 md:h-10 text-[13px] md:text-sm px-3 md:px-3.5 bg-blue-300 dark:bg-[#0e1526] border-[#25324a] text-gray-100 outline-none"
-          />
-          <Button
-            onClick={send}
-            className="h-9 md:h-10 px-3 md:px-4"
-            style={{ backgroundColor: "#7c3aed", color: "white" }}
-          >
-            Send
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}

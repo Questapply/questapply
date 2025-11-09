@@ -28,7 +28,7 @@ const SchoolRankings = ({ rankings }: SchoolRankingsProps) => {
   if (!validRankings.length) return null;
 
   return (
-    <div className="rounded-lg bg-gray-100/70 dark:bg-gray-800/60 p-2.5 md:p-3 min-w-0">
+    <div className="rounded-lg bg-gray-200/70 dark:bg-gray-800/60 p-2.5 md:p-3 min-w-0">
       <h4 className="text-xs md:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 md:mb-2">
         Rankings
       </h4>

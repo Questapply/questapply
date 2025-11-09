@@ -147,12 +147,12 @@ function StaticProfessorList() {
               className={cn(
                 "flex items-center gap-2 px-4  rounded-full text-xs border !py-1.5 ",
 
-                "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+                "bg-sky-300 dark:bg-gray-800 border-gray-400 font-semibold dark:border-gray-700 text-gray-700 dark:text-gray-300",
                 "hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:border-purple-200 dark:hover:border-purple-700 hover:shadow-sm",
                 "transition-all duration-300 ease-in-out focus:outline-none",
 
                 button.label
-                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-gray-50 border-purple-200 dark:border-purple-700 "
+                  ? "bg-purple-400 dark:bg-purple-900/30 text-violet-700 font-semibold dark:text-gray-50 border-purple-400 dark:border-purple-700 "
                   : "",
 
                 "opacity-50 cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-none"
@@ -222,7 +222,7 @@ function StaticProfessorList() {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 mt-2 w-full min-h-[80px]">
+                      <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 mt-2 w-full min-h-[80px]">
                         <div className="flex flex-col">
                           <a className="text-purple-600 dark:text-purple-400 hover:underline text-md font-medium transition-colors">
                             {professor.school_name}
@@ -297,7 +297,7 @@ function StaticProfessorList() {
                 <motion.div className="md:col-span-2" variants={itemVariants}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full ">
                     {/* Research Interests */}
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 h-full">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4 h-full">
                       <div className="flex justify-between items-center mb-2">
                         <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
                           Research Interest
@@ -324,13 +324,13 @@ function StaticProfessorList() {
                     </div>
 
                     {/* Programs */}
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 h-full">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4 h-full">
                       <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                         Programs
                       </h4>
                       <div className="space-y-4">
                         <motion.div
-                          className="flex items-center gap-2 p-2 rounded-lg transition-all duration-300 border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/10"
+                          className="flex items-center gap-2 p-2 rounded-lg transition-all duration-300 border border-green-200 dark:border-green-900 bg-green-100/90 dark:bg-green-900/10"
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.3 }}

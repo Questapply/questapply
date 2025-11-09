@@ -7,7 +7,14 @@ import { motion } from "framer-motion";
 import { Button } from "../ui/button";
 import { CardContent } from "../ui/card";
 import AnimatedCard from "../ui/animated-card";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Mail,
   MapPin,
@@ -28,6 +35,7 @@ import {
   AvailableProgram,
 } from "../../types";
 import FilterDropdown from "../filters/FilterDropdown";
+
 import {
   countryOptions,
   areaOfStudyOptions,
@@ -135,6 +143,18 @@ const defaultCategoryPrograms: CategoryPrograms = {
   flat: [],
   all: [],
 };
+// ===== Auth helpers =====
+const getAuth = () => {
+  const t = localStorage.getItem("token");
+  return { token: t, isGuest: !t };
+};
+const authHeaders = (json = true) => {
+  const { token } = getAuth();
+  const h: Record<string, string> = {};
+  if (json) h["Content-Type"] = "application/json";
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  return h;
+};
 
 /* ---------------- Filter state (align with FindSchools) ---------------- */
 type FiltersState = {
@@ -166,7 +186,12 @@ function previewTitle(text: string, max = 40) {
 const FindProfessors = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-
+  const location = useLocation();
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const isGuest = !token;
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [showGate, setShowGate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -175,8 +200,8 @@ const FindProfessors = () => {
     useState<UserPreferences | null>(null);
 
   const [selectedFilters, setSelectedFilters] = useState<FiltersState>({});
-  const [favorites, setFavorites] = useState<Record<number, boolean>>({});
-
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [favBusy, setFavBusy] = useState<Set<number>>(new Set());
   const [selectedProfessor, setSelectedProfessor] =
     useState<DialogProfessor | null>(null);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
@@ -259,6 +284,42 @@ const FindProfessors = () => {
       // ignore
     }
   }, []);
+
+  const nextParam = useMemo(
+    () => encodeURIComponent(location.pathname + location.search),
+    [location.pathname, location.search]
+  );
+  const goLogin = () => navigate(`/auth?mode=login&next=${nextParam}`);
+  const guard = (fn?: () => void) => {
+    if (isGuest) {
+      setShowGate(true);
+      return;
+    }
+    fn?.();
+  };
+
+  /** onClick برای <a> که برای مهمان مانع ناوبری می‌شود */
+  const guardAnchor: React.MouseEventHandler<HTMLAnchorElement> = (e) => {
+    if (isGuest) {
+      e.preventDefault();
+      setShowGate(true);
+    }
+  };
+  useEffect(() => {
+    if (!isGuest) return;
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setShowGate(true);
+      },
+      { root: null, threshold: 0.1, rootMargin: "0px 0px -30% 0px" }
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, [isGuest]);
 
   useEffect(() => {
     fetchProgramList();
@@ -527,6 +588,187 @@ const FindProfessors = () => {
     []
   );
 
+  // const fetchProfessors = useCallback(
+  //   async (
+  //     page: number,
+  //     filters: FiltersState,
+  //     opts: { append?: boolean } = {}
+  //   ) => {
+  //     const { append = false } = opts;
+  //     const token = localStorage.getItem("token");
+  //     if (!token) {
+  //       navigate("/auth?mode=login");
+  //       return;
+  //     }
+
+  //     const ctl = resetController(findAbortRef);
+
+  //     if (append) setLoadingMore(true);
+  //     else setLoading(true);
+
+  //     try {
+  //       const cleanFilters = Object.entries(filters).reduce(
+  //         (acc, [key, value]) => {
+  //           if (
+  //             value === undefined ||
+  //             value === "" ||
+  //             key === "page" ||
+  //             key === "limit"
+  //           )
+  //             return acc;
+  //           if (Array.isArray(value)) {
+  //             const csv = (value as string[]).filter(Boolean).join(",");
+  //             if (csv) acc[key] = csv;
+  //           } else if (
+  //             key === "degreeLevel" &&
+  //             String(value).toLowerCase().includes("ph")
+  //           ) {
+  //             acc[key] = "PhD";
+  //           } else {
+  //             acc[key] = String(value);
+  //           }
+  //           return acc;
+  //         },
+  //         {} as Record<string, string>
+  //       );
+
+  //       const queryParams = new URLSearchParams({
+  //         page: String(page),
+  //         limit: String(filters.limit ?? 10),
+  //         light: page > 1 ? "1" : "0", // ⇐ دقیقاً مثل قبل
+  //         ...cleanFilters,
+  //       });
+
+  //       const response = await fetch(
+  //         `${API_URL}/professor-data/find?${queryParams}`,
+  //         {
+  //           method: "GET",
+  //           headers: {
+  //             Authorization: `Bearer ${token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //           signal: ctl.signal,
+  //         }
+  //       );
+
+  //       if (!response.ok) throw new Error("Failed to fetch professors");
+
+  //       const data = await response.json();
+
+  //       /* --- بوت‌استرپ همانند نسخه‌ی اصلی تو: از userPreferences فیلتر اولیه ساخته می‌شود --- */
+  //       if (!initialUserPrefFiltersApplied.current && data.userPreferences) {
+  //         setUserPreferences(data.userPreferences);
+
+  //         const parseCSV = (s: string | null): string[] =>
+  //           s
+  //             ? s
+  //                 .split(",")
+  //                 .map((x) => x.trim())
+  //                 .filter(Boolean)
+  //             : [];
+
+  //         const initial: FiltersState = { page: 1, limit: 10 };
+
+  //         if (data.userPreferences.country)
+  //           initial.country = String(data.userPreferences.country);
+
+  //         if (data.userPreferences.level) {
+  //           let levelValue = data.userPreferences.level;
+  //           if (levelValue === "Ph.D.") levelValue = "PhD";
+  //           initial.degreeLevel = levelValue;
+  //         }
+
+  //         if (data.userPreferences.areaOfStudy?.id)
+  //           initial.areaOfStudy = String(data.userPreferences.areaOfStudy.id);
+
+  //         if (data.userPreferences.program)
+  //           initial.program = String(data.userPreferences.program);
+
+  //         // URL params override/extend
+  //         const urlParams = new URLSearchParams(window.location.search);
+  //         const urlCountry = urlParams.get("country");
+  //         const urlAreaOfStudy = urlParams.get("areaOfStudy");
+  //         const urlProgram = urlParams.get("program");
+  //         const urlDegreeLevel = urlParams.get("degreeLevel");
+  //         const urlResearchInterest = urlParams.get("researchInterest");
+  //         const urlTitle = urlParams.get("title");
+  //         const urlState = parseCSV(urlParams.get("state"));
+  //         const urlSchool = parseCSV(urlParams.get("school"));
+
+  //         if (urlCountry) initial.country = urlCountry;
+  //         if (urlAreaOfStudy) initial.areaOfStudy = urlAreaOfStudy;
+  //         if (urlProgram) initial.program = urlProgram;
+  //         if (urlDegreeLevel) initial.degreeLevel = urlDegreeLevel;
+  //         if (urlSchool.length) initial.school = urlSchool;
+  //         if (urlState.length) initial.state = urlState;
+  //         if (urlResearchInterest)
+  //           initial.researchInterest = urlResearchInterest;
+
+  //         // set filters into UI
+  //         setSelectedFilters(initial);
+  //         setCurrentPage(initial.page as number);
+
+  //         // preload dependent dropdowns
+  //         if (initial.country) {
+  //           const stateCsv = initial.state?.join(",");
+  //           await fetchStates(initial.country);
+  //           await fetchSchoolsForDropdown(initial.country, stateCsv);
+  //         }
+  //         if (initial.areaOfStudy) {
+  //           await fetchProgramsByAreas([initial.areaOfStudy]);
+  //         }
+
+  //         initialUserPrefFiltersApplied.current = true;
+
+  //         // Now fetch with the initial filters and RETURN (avoid showing unfiltered results)
+  //         await fetchProfessors(1, initial, { append: false });
+  //         return;
+  //       }
+
+  //       // Normal path
+  //       const newList: Professor[] = Array.isArray(data.professors)
+  //         ? data.professors
+  //         : [];
+
+  //       setAvailableResearchInterests(
+  //         Array.isArray(data.researchInterests) ? data.researchInterests : []
+  //       );
+  //       setTotalPages(Number(data.totalPages || 0));
+  //       setCategoryPrograms(data.categoryPrograms || defaultCategoryPrograms);
+
+  //       if (append) {
+  //         setProfessors((prev) => {
+  //           const seen = new Set(prev.map((p) => p.ID));
+  //           const merged = [...prev];
+  //           for (const p of newList) if (!seen.has(p.ID)) merged.push(p);
+  //           return merged;
+  //         });
+  //       } else {
+  //         setProfessors(newList);
+  //         setFavorites([]);
+  //       }
+  //     } catch (error) {
+  //       if ((error as any)?.name === "AbortError") return;
+  //       console.error("Error fetching professors:", error);
+  //       toast({
+  //         title: "Error",
+  //         description: "Failed to load professors. Please try again.",
+  //         variant: "destructive",
+  //       });
+  //     } finally {
+  //       setLoading(false);
+  //       setLoadingMore(false);
+  //     }
+  //   },
+  //   [
+  //     navigate,
+  //     toast,
+  //     fetchStates,
+  //     fetchSchoolsForDropdown,
+  //     fetchProgramsByAreas,
+  //   ]
+  // );
+
   const fetchProfessors = useCallback(
     async (
       page: number,
@@ -534,18 +776,14 @@ const FindProfessors = () => {
       opts: { append?: boolean } = {}
     ) => {
       const { append = false } = opts;
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/auth?mode=login");
-        return;
-      }
+      const { isGuest } = getAuth();
 
       const ctl = resetController(findAbortRef);
-
       if (append) setLoadingMore(true);
       else setLoading(true);
 
       try {
+        // 1) فیلترها تمیز
         const cleanFilters = Object.entries(filters).reduce(
           (acc, [key, value]) => {
             if (
@@ -571,33 +809,37 @@ const FindProfessors = () => {
           {} as Record<string, string>
         );
 
-        const queryParams = new URLSearchParams({
+        // 2) پارامترهای مهمان/لاگین
+        const params = new URLSearchParams({
           page: String(page),
           limit: String(filters.limit ?? 10),
-          light: page > 1 ? "1" : "0", // ⇐ دقیقاً مثل قبل
+          light: page > 1 ? "1" : "0",
           ...cleanFilters,
         });
+        if (isGuest) {
+          params.set("guest", "1");
+          params.set("ignoreUserDefaults", "1");
+        }
 
-        const response = await fetch(
-          `${API_URL}/professor-data/find?${queryParams}`,
+        // 3) درخواست
+        const res = await fetch(
+          `${API_URL}/professor-data/find?${params.toString()}`,
           {
             method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: authHeaders(true), // بدون توکن هم کار می‌کنه
             signal: ctl.signal,
           }
         );
+        if (!res.ok) throw new Error("Failed to fetch professors");
+        const data = await res.json();
 
-        if (!response.ok) throw new Error("Failed to fetch professors");
-
-        const data = await response.json();
-
-        /* --- بوت‌استرپ همانند نسخه‌ی اصلی تو: از userPreferences فیلتر اولیه ساخته می‌شود --- */
-        if (!initialUserPrefFiltersApplied.current && data.userPreferences) {
+        // 4) بوت‌استرپ فیلتر از userPreferences فقط برای لاگین‌شده‌ها
+        if (
+          !isGuest &&
+          !initialUserPrefFiltersApplied.current &&
+          data.userPreferences
+        ) {
           setUserPreferences(data.userPreferences);
-
           const parseCSV = (s: string | null): string[] =>
             s
               ? s
@@ -605,25 +847,21 @@ const FindProfessors = () => {
                   .map((x) => x.trim())
                   .filter(Boolean)
               : [];
-
           const initial: FiltersState = { page: 1, limit: 10 };
 
           if (data.userPreferences.country)
             initial.country = String(data.userPreferences.country);
-
           if (data.userPreferences.level) {
             let levelValue = data.userPreferences.level;
             if (levelValue === "Ph.D.") levelValue = "PhD";
             initial.degreeLevel = levelValue;
           }
-
           if (data.userPreferences.areaOfStudy?.id)
             initial.areaOfStudy = String(data.userPreferences.areaOfStudy.id);
-
           if (data.userPreferences.program)
             initial.program = String(data.userPreferences.program);
 
-          // URL params override/extend
+          // URL override
           const urlParams = new URLSearchParams(window.location.search);
           const urlCountry = urlParams.get("country");
           const urlAreaOfStudy = urlParams.get("areaOfStudy");
@@ -642,12 +880,11 @@ const FindProfessors = () => {
           if (urlState.length) initial.state = urlState;
           if (urlResearchInterest)
             initial.researchInterest = urlResearchInterest;
+          if (urlTitle) initial.title = urlTitle;
 
-          // set filters into UI
           setSelectedFilters(initial);
-          setCurrentPage(initial.page as number);
+          setCurrentPage(1);
 
-          // preload dependent dropdowns
           if (initial.country) {
             const stateCsv = initial.state?.join(",");
             await fetchStates(initial.country);
@@ -656,19 +893,16 @@ const FindProfessors = () => {
           if (initial.areaOfStudy) {
             await fetchProgramsByAreas([initial.areaOfStudy]);
           }
-
           initialUserPrefFiltersApplied.current = true;
 
-          // Now fetch with the initial filters and RETURN (avoid showing unfiltered results)
           await fetchProfessors(1, initial, { append: false });
           return;
         }
 
-        // Normal path
+        // 5) مسیر معمول
         const newList: Professor[] = Array.isArray(data.professors)
           ? data.professors
           : [];
-
         setAvailableResearchInterests(
           Array.isArray(data.researchInterests) ? data.researchInterests : []
         );
@@ -682,26 +916,9 @@ const FindProfessors = () => {
             for (const p of newList) if (!seen.has(p.ID)) merged.push(p);
             return merged;
           });
-          setFavorites((prev) => ({
-            ...prev,
-            ...newList.reduce(
-              (acc: Record<number, boolean>, prof: Professor) => {
-                if (prev[prof.ID] === undefined) acc[prof.ID] = false;
-                return acc;
-              },
-              {}
-            ),
-          }));
         } else {
           setProfessors(newList);
-          const initialFavorites = newList.reduce(
-            (acc: Record<number, boolean>, prof: Professor) => {
-              acc[prof.ID] = false;
-              return acc;
-            },
-            {}
-          );
-          setFavorites(initialFavorites);
+          setFavorites([]); // برای لاگین‌شده‌ها بعداً sync می‌شود
         }
       } catch (error) {
         if ((error as any)?.name === "AbortError") return;
@@ -716,17 +933,31 @@ const FindProfessors = () => {
         setLoadingMore(false);
       }
     },
-    [
-      navigate,
-      toast,
-      fetchStates,
-      fetchSchoolsForDropdown,
-      fetchProgramsByAreas,
-    ]
+    [toast, fetchStates, fetchSchoolsForDropdown, fetchProgramsByAreas]
   );
 
+  const fetchFavorites = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/professor-data/favorites`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json(); // { favorites: ["12","45", ...] }
+      const favSet = new Set(
+        ((data?.favorites as string[]) || []).map((s) => Number(s))
+      );
+      const ids = ((data?.favorites as string[]) || []).map((s) => Number(s));
+      setFavorites(ids);
+    } catch {
+      // بی‌صدا رد می‌شیم
+    }
+  }, [professors]);
   /* ------------------------------- Effects ------------------------------ */
-
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
   // بوت‌استرپ مثل قبل (یک بار) — همون منطق
   useEffect(() => {
     if (!initialFetchCompleted.current) {
@@ -806,6 +1037,68 @@ const FindProfessors = () => {
       next.page = 1;
       return next;
     });
+  };
+  // هندلر کلیک قلب (جایگزین onClick فعلی که فقط setFavorites می‌کرد)
+  const toggleFavorite = async (professorId: number) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/auth?mode=login");
+      return;
+    }
+
+    if (favBusy.has(professorId)) return; // جلوگیری از دوبار کلیک
+    setFavBusy((prev) => new Set(prev).add(professorId));
+
+    const isFav = favorites.includes(professorId);
+
+    // Optimistic UI
+    setFavorites((prev) =>
+      isFav ? prev.filter((id) => id !== professorId) : [...prev, professorId]
+    );
+
+    try {
+      const res = await fetch(`${API_URL}/professor-data/favorites`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        // ❗️این ساختار با بک‌اند تو یکیه (همون که در MyProfessors استفاده می‌کنی)
+        body: JSON.stringify({
+          professorId,
+          action: isFav ? "remove" : "add",
+        }),
+      });
+      if (!res.ok) throw new Error("fav failed");
+
+      // (اختیاری) همگام‌سازی سخت‌گیرانه با پاسخ سرور:
+      // const data = await res.json();
+      // if (Array.isArray(data.favorites)) {
+      //   setFavorites(data.favorites.map((x: any) => Number(x)));
+      // }
+
+      toast({
+        title: isFav
+          ? "Removed from My Professors"
+          : "Added to My Professors ❤️",
+      });
+    } catch (e) {
+      // Rollback در صورت خطا
+      setFavorites((prev) =>
+        isFav ? [...prev, professorId] : prev.filter((id) => id !== professorId)
+      );
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not update favorites.",
+      });
+    } finally {
+      setFavBusy((prev) => {
+        const s = new Set(prev);
+        s.delete(professorId);
+        return s;
+      });
+    }
   };
 
   const handleMultiFilterChange = useCallback(
@@ -1103,7 +1396,7 @@ const FindProfessors = () => {
               selectedLabel={selectedCountryLabel}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* State (multi) + شمارنده */}
@@ -1123,7 +1416,7 @@ const FindProfessors = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
               disabled={
                 loadingStates ||
                 !selectedFilters.country ||
@@ -1148,7 +1441,7 @@ const FindProfessors = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
               disabled={
                 loadingSchoolsForDropdown ||
                 !selectedFilters.country ||
@@ -1171,7 +1464,7 @@ const FindProfessors = () => {
               }}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Program (multi) وابسته به Area + DegreeLevel */}
@@ -1194,7 +1487,7 @@ const FindProfessors = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Research Interest (multi) + شمارنده */}
@@ -1212,7 +1505,7 @@ const FindProfessors = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Professor Title (single) */}
@@ -1225,7 +1518,7 @@ const FindProfessors = () => {
               selectedLabel={selectedProfessorTitleLabel}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* دکمه Apply */}
@@ -1303,6 +1596,7 @@ const FindProfessors = () => {
                     const fullList = profPrograms;
                     const canShowMore =
                       fullList.length > initialPrograms.length;
+                    const isFav = favorites.includes(professor.ID);
                     return (
                       <AnimatedCard
                         key={professor.ID}
@@ -1342,36 +1636,23 @@ const FindProfessors = () => {
                                       {professor.name}
                                     </h3>
                                     <button
-                                      onClick={() => {
-                                        setFavorites((prev) => {
-                                          const next = {
-                                            ...prev,
-                                            [professor.ID]: !prev[professor.ID],
-                                          };
-                                          toast({
-                                            title: next[professor.ID]
-                                              ? "Success"
-                                              : "Info",
-                                            description: next[professor.ID]
-                                              ? `${professor.name} added to My Professors`
-                                              : `${professor.name} removed from My Professors`,
-                                          });
-                                          return next;
-                                        });
-                                      }}
-                                      className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
-                                      aria-label={
-                                        favorites[professor.ID]
-                                          ? "Remove from favorites"
-                                          : "Add to favorites"
+                                      onClick={() =>
+                                        toggleFavorite(professor.ID)
+                                      }
+                                      disabled={favBusy.has(professor.ID)}
+                                      aria-pressed={isFav}
+                                      title={
+                                        isFav
+                                          ? "Remove from My Professors"
+                                          : "Add to My Professors"
                                       }
                                     >
                                       <Heart
                                         className={cn(
                                           "h-5 w-5 transition-colors duration-300",
-                                          favorites[professor.ID]
-                                            ? "text-red-500 fill-red-500"
-                                            : ""
+                                          isFav && "text-red-500 fill-red-500",
+                                          favBusy.has(professor.ID) &&
+                                            "opacity-60"
                                         )}
                                       />
                                     </button>
@@ -1399,7 +1680,12 @@ const FindProfessors = () => {
                               <div className="flex items-center gap-6 mt-2 justify-center w-full">
                                 {professor.email && (
                                   <a
-                                    href={`mailto:${professor.email}`}
+                                    href={
+                                      isGuest
+                                        ? "#"
+                                        : `mailto:${professor.email}`
+                                    }
+                                    onClick={guardAnchor}
                                     className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
                                   >
                                     <Mail className="w-6 h-6" />
@@ -1408,6 +1694,7 @@ const FindProfessors = () => {
                                 {professor.google_scholar && (
                                   <a
                                     href={professor.google_scholar}
+                                    onClick={guardAnchor}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors"
@@ -1430,6 +1717,7 @@ const FindProfessors = () => {
                                   <a
                                     href={professor.website}
                                     target="_blank"
+                                    onClick={guardAnchor}
                                     rel="noopener noreferrer"
                                     className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
                                   >
@@ -1443,7 +1731,9 @@ const FindProfessors = () => {
                                   variant="outline"
                                   size="sm"
                                   className="flex-1 transition-all hover:bg-gray-100 dark:hover:bg-gray-700"
-                                  onClick={() => handleEmailClick(professor)}
+                                  onClick={() =>
+                                    guard(() => handleEmailClick(professor))
+                                  }
                                 >
                                   <Mail className="h-4 w-4 mr-1" />
                                   Send Email
@@ -1452,7 +1742,9 @@ const FindProfessors = () => {
                                   variant="outline"
                                   size="sm"
                                   className="flex-1 transition-all hover:bg-gray-100 dark:hover:bg-gray-700"
-                                  onClick={() => handleReminderClick(professor)}
+                                  onClick={() =>
+                                    guard(() => handleReminderClick(professor))
+                                  }
                                 >
                                   <Send className="h-4 w-4 mr-1" />
                                   Remind
@@ -1737,10 +2029,14 @@ const FindProfessors = () => {
 
             {/* Load More */}
             {!loading && totalPages > 1 && currentPage < totalPages && (
-              <div className="flex justify-center mt-8">
+              <div ref={loadMoreRef} className="flex justify-center mt-8">
                 <Button
                   variant="outline"
                   onClick={() => {
+                    if (isGuest) {
+                      setShowGate(true);
+                      return;
+                    }
                     const newPage = currentPage + 1;
                     setCurrentPage(newPage);
                     fetchProfessors(newPage, selectedFilters, { append: true });
@@ -1782,6 +2078,31 @@ const FindProfessors = () => {
           isReminder={true}
         />
       )}
+      <Dialog open={showGate} onOpenChange={setShowGate}>
+        <DialogContent className="sm:max-w-3xl w-[92vw]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl md:text-3xl border-b mb-2">
+              Upgrade your access level
+            </DialogTitle>
+            <DialogDescription className="mt-2">
+              To access all the free information, please sign up or log in.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-center mt-6 gap-3">
+            <Button
+              size="lg"
+              className="px-8 py-6 text-lg rounded-full"
+              onClick={goLogin}
+            >
+              Quest Rewards
+            </Button>
+            <Button variant="ghost" onClick={() => setShowGate(false)}>
+              Maybe later
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

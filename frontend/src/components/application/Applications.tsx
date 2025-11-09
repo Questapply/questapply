@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -14,9 +13,12 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import NavigationButtons from "../layout/NavigationButtons";
+
+
 
 const Applications = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -131,7 +133,10 @@ const Applications = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
-      <div className="space-y-8">
+      
+        <NavigationButtons isDarkMode={isDarkMode} />
+     
+      <div className="space-y-8 mt-4 md:mt-7">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -224,7 +229,9 @@ const Applications = () => {
                               </p>
                               <p className="text-sm">
                                 {app.submissionDate
-                                  ? new Date(app.submissionDate).toLocaleDateString()
+                                  ? new Date(
+                                      app.submissionDate
+                                    ).toLocaleDateString()
                                   : "Not yet submitted"}
                               </p>
                             </div>
@@ -233,7 +240,9 @@ const Applications = () => {
                                 Documents
                               </p>
                               <p className="text-sm">
-                                {app.documents.length} / {app.documents.length + (app.missingDocuments?.length || 0)} 
+                                {app.documents.length} /{" "}
+                                {app.documents.length +
+                                  (app.missingDocuments?.length || 0)}
                                 completed
                               </p>
                             </div>
@@ -244,9 +253,7 @@ const Applications = () => {
                               View Details
                             </Button>
                             {app.status === "pending" && (
-                              <Button size="sm">
-                                Continue Application
-                              </Button>
+                              <Button size="sm">Continue Application</Button>
                             )}
                           </div>
                         </div>
@@ -295,7 +302,9 @@ const Applications = () => {
                                     Deadline
                                   </p>
                                   <p className="text-sm">
-                                    {new Date(app.deadline).toLocaleDateString()}
+                                    {new Date(
+                                      app.deadline
+                                    ).toLocaleDateString()}
                                   </p>
                                 </div>
                                 <div>
@@ -304,7 +313,9 @@ const Applications = () => {
                                   </p>
                                   <p className="text-sm">
                                     {app.submissionDate
-                                      ? new Date(app.submissionDate).toLocaleDateString()
+                                      ? new Date(
+                                          app.submissionDate
+                                        ).toLocaleDateString()
                                       : "Not yet submitted"}
                                   </p>
                                 </div>
@@ -313,7 +324,9 @@ const Applications = () => {
                                     Documents
                                   </p>
                                   <p className="text-sm">
-                                    {app.documents.length} / {app.documents.length + (app.missingDocuments?.length || 0)} 
+                                    {app.documents.length} /{" "}
+                                    {app.documents.length +
+                                      (app.missingDocuments?.length || 0)}
                                     completed
                                   </p>
                                 </div>

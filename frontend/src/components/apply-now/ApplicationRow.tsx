@@ -172,7 +172,7 @@ const ApplicationRow = (
       </TableRow>
 
       {/* 🖥️ دسکتاپ/تبلت: ردیف جدول اصلی */}
-      <TableRow className="hidden md:table-row border-b border-gray-400 dark:border-gray-700 ">
+      <TableRow className="hidden md:table-row border-b border-gray-400 dark:border-gray-700 md:px-2">
         {/* Program */}
         <TableCell className="md:w-1/3 w-auto ">
           <div className="flex items-start md:items-center gap-2.5 md:gap-3">

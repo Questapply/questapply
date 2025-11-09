@@ -26,6 +26,8 @@ import submissionRoutes from "./routes/submissionRoutes.js";
 import paymentsRouter from "./routes/paymentsRouter.js";
 import notificationsRoutes from "./routes/notificationsRoutes.js";
 import { authenticateToken } from "./middleware/authMiddleware.js";
+import metaRoutes from "./routes/metaRoutes.js";
+import ticketRoutes from "./routes/ticketRoutes.js";
 
 dotenv.config();
 
@@ -90,22 +92,24 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 // Use program routes with authentication
 // Add this line before defining other API endpoints
-app.use(
-  "/api/program-data",
-  (req, res, next) => {
-    // Public paths that don't require authentication
-    if (req.method === "OPTIONS") return res.sendStatus(204);
-    if (
-      req.path === "/program-categories" ||
-      req.path.startsWith("/program/")
-    ) {
-      next();
-    } else {
-      authenticateToken(req, res, next);
-    }
-  },
-  programRoutes
-);
+// app.use(
+//   "/api/program-data",
+//   (req, res, next) => {
+//     // Public paths that don't require authentication
+//     if (req.method === "OPTIONS") return res.sendStatus(204);
+//     if (
+//       req.path === "/program-categories" ||
+//       req.path.startsWith("/program/")
+//     ) {
+//       next();
+//     } else {
+//       authenticateToken(req, res, next);
+//     }
+//   },
+//   programRoutes
+// );
+// server.js
+app.use("/api/program-data", programRoutes);
 
 //Use Professors routes with authentication
 app.use("/api/professor-data", professorRoutes);
@@ -126,6 +130,8 @@ app.use("/api", schoolRoutes);
 //Use States routes with authentication
 app.use("/api", statesRoutes);
 
+app.use("/api", metaRoutes);
+
 // Use submission routes
 app.use("/api", submissionRoutes);
 
@@ -136,6 +142,9 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Use  Payments routes
 app.use("/api", paymentsRouter);
+
+//Use Ticket routes
+app.use("/api/tickets", ticketRoutes);
 
 //Use image Prroxy
 app.use("/api", imageProxyRoutes);

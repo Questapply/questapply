@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "../ui/button";
@@ -254,7 +253,7 @@ const RoadmapSection = () => {
 
         {/* Subtitle - Increased spacing to match Hero section (mb-16 -> mb-8) */}
         <motion.p
-          className="text-lg md:text-xl text-center mb-8 dark:text-purple-200 text-purple-700"
+          className="text-lg md:text-xl text-center my-8 dark:text-purple-200 text-purple-700"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
@@ -290,7 +289,7 @@ const RoadmapSection = () => {
           >
             <GradientCard
               variant="talent-section"
-              className="p-4 md:p-6 shadow-xl w-full dark:bg-gray-800 bg-white/90"
+              className="p-4 md:p-6 shadow-xl w-full dark:bg-gray-800 bg-purple-200"
             >
               {/* Updated Button Layout - with icons above text */}
               <div className="flex justify-center items-center my-6 px-3 py-2">

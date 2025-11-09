@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import Navbar from "../home/Navbar";
 
 export default function HelpCenterLayout() {
   return (

@@ -9,7 +9,7 @@ export const IMAGE_PROXY_URL = (process.env.IMAGE_PROXY_URL || "").replace(
   /\/$/,
   ""
 );
-
+const WP_PREFIX = process.env.WP_PREFIX || "qacom_wp_";
 export function buildUploadsUrl(raw = "") {
   if (!raw) return "";
 
@@ -79,7 +79,6 @@ export const countryCurrency = {
   380: "AUD", // Australia
 };
 
-// (اختیاری) نماد ارز برای نمایش UI
 export const currencySymbol = {
   USD: "$",
   CAD: "C$",
@@ -110,3 +109,7 @@ export const getCurrencySymbol = (cur) => currencySymbol?.[cur] || "$";
 
 export const getDomesticMetaKeyForCountry = (countryId) =>
   domesticFeeMetaByCountry?.[Number(countryId)] || null;
+
+export const T_POSTS = `${WP_PREFIX}posts`;
+export const T_POSTMETA = `${WP_PREFIX}postmeta`;
+export const T_USERS = `${WP_PREFIX}users`;

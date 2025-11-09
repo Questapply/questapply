@@ -52,7 +52,7 @@ const RoadmapApplicationRow = ({
   };
 
   return (
-    <TableRow className="border-b border-gray-200 dark:border-gray-700">
+    <TableRow className="border-b border-gray-200 dark:border-gray-700 bg-slate-100 dark:bg-green-900/10">
       <TableCell>
         <div className="flex items-center gap-3">
           <motion.img
@@ -82,7 +82,7 @@ const RoadmapApplicationRow = ({
         {application.deadline}
       </TableCell>
 
-      <TableCell className="text-gray-700 dark:text-gray-300">
+      <TableCell className="text-gray-700 dark:text-gray-300 ">
         {application.applicationFees}
       </TableCell>
 

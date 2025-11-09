@@ -18,6 +18,7 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useToast } from "../../hooks/use-toast";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Validation schemas

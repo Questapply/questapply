@@ -1,8 +1,15 @@
 ///////////////////////////////////////////////////////////
 // FindPrograms.tsx
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import AnimatedCard from "../ui/animated-card";
 import StatCircle from "../ui/stat-circle";
 import { CardContent } from "../ui/card";
@@ -17,6 +24,7 @@ import type { FilterSnapshot, FilterPatch } from "../chat/actions";
 import ResultsColumn from "../chat/ResultsColumn";
 import ProgramResultCard from "@/components/find-programs/ProgramResultCard";
 import { Skeleton } from "../ui/skeleton";
+import { Loader2 } from "lucide-react";
 import {
   degreeLevelOptions,
   englishTestOptions,
@@ -41,6 +49,7 @@ import {
 import DeadlineDropdown from "../filters/DeadlineDropdown";
 import EnglishDropdown from "../filters/EnglishDropdown";
 import GpaDropdown from "../filters/GpaDropdown";
+import { useAuth } from "@/context/AuthContext";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const API_BASE = `${API_URL}/program-data`;
@@ -207,12 +216,24 @@ const getGREStatusStyle = (status: GreStatus) => {
 const PAGE_ID = "find-programs";
 const FILTER_WIDTH = "w-[150px] sm:w-[180px] md:w-[260px]";
 const FILTER_BTN = "truncate";
+const buildHeaders = (hasToken: boolean) =>
+  hasToken
+    ? {
+        Authorization: `Bearer ${localStorage.getItem("token")!}`,
+        "Content-Type": "application/json",
+      }
+    : { "Content-Type": "application/json" };
 
 // ---------------- Component ----------------
 const FindPrograms = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [showGate, setShowGate] = useState(false);
+  const loadMoreRef = useRef<HTMLButtonElement | null>(null);
 
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const isGuest = !token;
   // نتایج و وضعیت
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,100 +270,174 @@ const FindPrograms = () => {
   const [availableSchools, setAvailableSchools] = useState<Option[]>([]);
   const [loadingSchools, setLoadingSchools] = useState(false);
   const [programsToCompare, setProgramsToCompare] = useState<number[]>([]);
-
-  // Country & AreaOfStudy options از userPreferences
-  const countryOptions = useMemo<Option[]>(
-    () =>
-      (userPreferences?.availableCountries || []).map((c) => ({
-        value: String(c.country),
-        label: c.name,
-      })),
-    [userPreferences?.availableCountries]
+  // === Guest gating (Programs) ===
+  const GUEST_FILTER_KEY_PROGRAMS = "guest_filter_used_programs";
+  const [guestFilterUsed, setGuestFilterUsed] = useState<boolean>(
+    () => sessionStorage.getItem(GUEST_FILTER_KEY_PROGRAMS) === "1"
   );
+  const [guestCountries, setGuestCountries] = useState<Option[]>([]);
+  const [guestAreas, setGuestAreas] = useState<Option[]>([]);
+  const fetchGuestCountries = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/meta/countries?guest=1`);
+      if (!res.ok) return setGuestCountries([]);
+      const data = await res.json();
+      const items: Option[] = (data.countries || []).map((c: any) => ({
+        value: String(c.id),
+        label: c.name,
+      }));
+      setGuestCountries(items);
+    } catch {
+      setGuestCountries([]);
+    }
+  }, []);
 
-  const areaOptions = useMemo<Option[]>(
-    () =>
-      (userPreferences?.availableAreasOfStudy || []).map((a) => ({
+  const fetchGuestAreas = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `${API_URL}/program-data/program-categories${
+          isGuest ? "?guest=1" : ""
+        }`,
+        { headers: buildHeaders(!isGuest) }
+      );
+      if (!res.ok) return setGuestAreas([]);
+      const data = await res.json();
+      const items: Option[] = (data.categories || []).map((a: any) => ({
         value: String(a.id),
         label: a.name,
-      })),
-    [userPreferences?.availableAreasOfStudy]
-  );
+      }));
+      setGuestAreas(items);
+    } catch {
+      setGuestAreas([]);
+    }
+  }, [isGuest]);
+  useEffect(() => {
+    if (isGuest) {
+      fetchGuestCountries();
+      fetchGuestAreas();
+    }
+  }, [isGuest, fetchGuestCountries, fetchGuestAreas]);
+  const countryOptions = useMemo<Option[]>(() => {
+    if (userPreferences?.availableCountries?.length) {
+      return (userPreferences.availableCountries || []).map((c: any) => ({
+        value: String(c.country ?? c.id),
+        label: c.name,
+      }));
+    }
+    return guestCountries;
+  }, [userPreferences?.availableCountries, guestCountries]);
+
+  const areaOptions = useMemo<Option[]>(() => {
+    if (userPreferences?.availableAreasOfStudy?.length) {
+      return (userPreferences.availableAreasOfStudy || []).map((a: any) => ({
+        value: String(a.id),
+        label: a.name,
+      }));
+    }
+    return guestAreas;
+  }, [userPreferences?.availableAreasOfStudy, guestAreas]);
+
+  //کاربر مهمان
+
+  // Country & AreaOfStudy options از userPreferences
+  // const countryOptions = useMemo<Option[]>(
+  //   () =>
+  //     (userPreferences?.availableCountries || []).map((c) => ({
+  //       value: String(c.country),
+  //       label: c.name,
+  //     })),
+  //   [userPreferences?.availableCountries]
+  // );
+
+  // const areaOptions = useMemo<Option[]>(
+  //   () =>
+  //     (userPreferences?.availableAreasOfStudy || []).map((a) => ({
+  //       value: String(a.id),
+  //       label: a.name,
+  //     })),
+  //   [userPreferences?.availableAreasOfStudy]
+  // );
 
   // ---------------- API Calls ----------------
   // States (مثل FindSchool)
-  const fetchStates = useCallback(async (countryId: string) => {
-    setAvailableStates([]);
-    if (!countryId) {
-      setLoadingStates(false);
-      return;
-    }
-    setLoadingStates(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/states?country=${countryId}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!res.ok) {
-        setAvailableStates([]);
+  const fetchStates = useCallback(
+    async (countryId: string) => {
+      setAvailableStates([]);
+      if (!countryId) {
         setLoadingStates(false);
         return;
       }
-      const data = await res.json();
-      const states: Option[] = (data.states || []).map((s: any) => ({
-        value: s.name, // ✅ id
-        label: s.name,
-      }));
-      setAvailableStates(states);
-      setLoadingStates(false);
-    } catch {
-      setAvailableStates([]);
-      setLoadingStates(false);
-    }
-  }, []);
+      setLoadingStates(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/states?country=${countryId}${
+            isGuest ? "&guest=1&ignoreUserDefaults=1" : ""
+          }`,
+          {
+            method: "GET",
+            headers: buildHeaders(!isGuest),
+          }
+        );
+        if (!res.ok) {
+          setAvailableStates([]);
+          setLoadingStates(false);
+          return;
+        }
+        const data = await res.json();
+        const states: Option[] = (data.states || []).map((s: any) => ({
+          value: s.name, // ✅ id
+          label: s.name,
+        }));
+        setAvailableStates(states);
+        setLoadingStates(false);
+      } catch {
+        setAvailableStates([]);
+        setLoadingStates(false);
+      }
+    },
+    [isGuest]
+  );
 
   // Schools dropdown برای کشور انتخابی
-  const fetchSchoolsForDropdown = useCallback(async (countryId: string) => {
-    setAvailableSchools([]);
-    if (!countryId) {
-      setLoadingSchools(false);
-      return;
-    }
-    setLoadingSchools(true);
-    try {
-      const token = localStorage.getItem("token");
-      // یک صفحه کافیست برای dropdown
-      const res = await fetch(
-        `${API_URL}/schools?country=${countryId}&page=1&limit=50`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      if (!res.ok) {
-        setAvailableSchools([]);
+  const fetchSchoolsForDropdown = useCallback(
+    async (countryId: string) => {
+      setAvailableSchools([]);
+      if (!countryId) {
         setLoadingSchools(false);
         return;
       }
-      const data = await res.json();
-      const schools: Option[] = (data.schools || []).map((s: any) => ({
-        value: String(s.id), // برای /find باید id بره
-        label: s.name,
-      }));
-      setAvailableSchools(schools);
-      setLoadingSchools(false);
-    } catch {
-      setAvailableSchools([]);
-      setLoadingSchools(false);
-    }
-  }, []);
+      setLoadingSchools(true);
+      try {
+        const token = localStorage.getItem("token");
+        // یک صفحه کافیست برای dropdown
+        const res = await fetch(
+          `${API_URL}/schools?country=${countryId}&page=1&limit=50${
+            isGuest ? "&guest=1&ignoreUserDefaults=1" : ""
+          }`,
+          {
+            method: "GET",
+            headers: buildHeaders(!isGuest),
+          }
+        );
+        if (!res.ok) {
+          setAvailableSchools([]);
+          setLoadingSchools(false);
+          return;
+        }
+        const data = await res.json();
+        const schools: Option[] = (data.schools || []).map((s: any) => ({
+          value: String(s.id),
+          label: s.name,
+        }));
+        setAvailableSchools(schools);
+        setLoadingSchools(false);
+      } catch {
+        setAvailableSchools([]);
+        setLoadingSchools(false);
+      }
+    },
+    [isGuest]
+  );
 
   // Programs by areas (+ degree) برای dropdown
   const fetchProgramsByAreasAndLevel = useCallback(
@@ -358,15 +453,12 @@ const FindPrograms = () => {
         const results = await Promise.all(
           areas.map((areaId) =>
             fetch(
-              `${API_URL}/program-data/by-area?areaOfStudy=${areaId}&degreeLevel=${encodeURIComponent(
-                degreeLevel
-              )}`,
+              `${API_URL}/program-data/by-area?areaOfStudy=${areaId}` +
+                `&degreeLevel=${encodeURIComponent(degreeLevel)}` +
+                (isGuest ? "&guest=1&ignoreUserDefaults=1" : ``),
               {
                 method: "GET",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
+                headers: buildHeaders(!isGuest),
               }
             ).then((r) => (r.ok ? r.json() : { programs: [] }))
           )
@@ -386,23 +478,20 @@ const FindPrograms = () => {
         setLoadingPrograms(false);
       }
     },
-    []
+    [isGuest]
   );
 
   // Initial Favorites load from the API
   const loadProgramFavorites = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      navigate("/auth?mode=login");
+      setFavorites({});
       return;
     }
 
     const res = await fetch(`${API_URL}/favorites`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      headers: buildHeaders(true),
     });
 
     if (!res.ok) {
@@ -431,11 +520,11 @@ const FindPrograms = () => {
       filtersOverride?: Record<string, string>
     ) => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          navigate("/auth?mode=login");
-          return;
-        }
+        // const token = localStorage.getItem("token");
+        // if (!token) {
+        //   navigate("/auth?mode=login");
+        //   return;
+        // }
         if (isLoadMore) setLoadingMore(true);
         else {
           setLoading(true);
@@ -446,6 +535,10 @@ const FindPrograms = () => {
         qp.append("page", String(pageNum));
         qp.append("limit", "10");
 
+        if (isGuest) {
+          qp.append("guest", "1");
+          qp.append("ignoreUserDefaults", "1");
+        }
         const f = filtersOverride || mapFiltersToApiParams(selectedFilters);
         Object.entries(f).forEach(([k, v]) => {
           if (v) qp.append(k, v);
@@ -455,17 +548,15 @@ const FindPrograms = () => {
           `${API_URL}/program-data/find?${qp.toString()}`,
           {
             method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: buildHeaders(!isGuest),
           }
         );
 
         if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            localStorage.removeItem("token");
-            navigate("/auth?mode=login");
+          if (isGuest && res.status === 401) {
+            setShowGate(true);
+            setLoading(false);
+            setLoadingMore(false);
             return;
           }
           if (res.status === 404) {
@@ -521,7 +612,7 @@ const FindPrograms = () => {
         });
       }
     },
-    [navigate, selectedFilters, toast]
+    [navigate, selectedFilters, toast, isGuest]
   );
 
   // loadProgram  to list
@@ -545,27 +636,30 @@ const FindPrograms = () => {
   // ---------------- Init: فقط یک API برای لود اولیه ----------------
   useEffect(() => {
     (async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/auth?mode=login");
-        return;
-      }
+      // const token = localStorage.getItem("token");
+      // if (!token) {
+      //   navigate("/auth?mode=login");
+      //   return;
+      // }
       setLoading(true);
       setNoResults(false);
 
       try {
         const res = await fetch(
-          `${API_URL}/program-data/find?page=1&limit=10`,
+          `${API_URL}/program-data/find?page=1&limit=10${
+            isGuest ? "&guest=1&ignoreUserDefaults=1" : ""
+          }`,
           {
             method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: buildHeaders(!isGuest),
           }
         );
         if (!res.ok) {
-          setNoResults(true);
+          if (isGuest && res.status === 401) {
+            setShowGate(true);
+          } else {
+            setNoResults(true);
+          }
           setLoading(false);
           return;
         }
@@ -632,12 +726,36 @@ const FindPrograms = () => {
     fetchSchoolsForDropdown,
     fetchStates,
     toast,
+    isGuest,
   ]);
+  useEffect(() => {
+    if (!isGuest) return;
+
+    const already = sessionStorage.getItem("guest_gate_seen") === "1";
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !already) {
+          setShowGate(true);
+          sessionStorage.setItem("guest_gate_seen", "1");
+        }
+      },
+      { root: null, threshold: 0.6 }
+    );
+    if (loadMoreRef.current) obs.observe(loadMoreRef.current);
+    return () => obs.disconnect();
+  }, [isGuest]);
 
   // ---------------- تغییرات UI فیلترها (بدون fetch نتایج) ----------------
 
   const handleFilterChange = useCallback(
     (key: keyof FiltersState, value?: string) => {
+      if (
+        isGuest &&
+        guestFilterUsed &&
+        (key === "country" || key === "areaOfStudy")
+      ) {
+        return;
+      }
       setSelectedFilters((prev) => {
         const next: FiltersState = { ...prev };
 
@@ -693,18 +811,25 @@ const FindPrograms = () => {
   // ---------------- Apply (اعمال ۷ فیلتر مثل FindSchool) ----------------
   const has = (v?: string) => typeof v === "string" && v.trim().length > 0;
   const isApplyEnabled = useMemo(() => {
+    if (isGuest) return true; // مهمان: همیشه فعال (به‌جز وقتی Busy)
+    const has = (v?: string) => typeof v === "string" && v.trim().length > 0;
     return (
       has(selectedFilters.country) &&
       has(selectedFilters.degreeLevel) &&
       has(selectedFilters.areaOfStudy)
     );
   }, [
+    isGuest,
     selectedFilters.country,
     selectedFilters.degreeLevel,
     selectedFilters.areaOfStudy,
   ]);
 
   const applyFilters = () => {
+    if (isGuest && guestFilterUsed) {
+      setShowGate(true);
+      return;
+    }
     setPage(1);
     setPrograms([]);
     const params = mapFiltersToApiParams({
@@ -724,6 +849,10 @@ const FindPrograms = () => {
       deadlineMonths: selectedFilters.deadlineMonths,
     });
     fetchPrograms(1, false, params);
+    if (isGuest) {
+      setGuestFilterUsed(true);
+      sessionStorage.setItem("guest_filter_used_programs", "1");
+    }
   };
 
   // ---------------- سایر هندلرها (بدون تغییر کارت‌ها) ----------------
@@ -775,6 +904,10 @@ const FindPrograms = () => {
   );
 
   const loadMore = () => {
+    if (isGuest) {
+      setShowGate(true);
+      return;
+    }
     const nextPage = page + 1;
     setPage(nextPage);
     fetchPrograms(nextPage, true);
@@ -1087,7 +1220,8 @@ const FindPrograms = () => {
               selectedValue={selectedFilters.country || ""}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
+              disabled={isGuest && guestFilterUsed}
             />
 
             {/* State (multi + counter) */}
@@ -1108,7 +1242,7 @@ const FindPrograms = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* School (single) */}
@@ -1129,7 +1263,7 @@ const FindPrograms = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Degree Level (single) */}
@@ -1141,7 +1275,7 @@ const FindPrograms = () => {
               selectedValue={selectedFilters.degreeLevel || ""}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Area of Study (multi + counter) */}
@@ -1153,7 +1287,8 @@ const FindPrograms = () => {
               onSelect={(v) => handleFilterChange("areaOfStudy", v)}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
+              disabled={isGuest && guestFilterUsed}
             />
 
             {/* Programs (multi + counter) */}
@@ -1171,7 +1306,7 @@ const FindPrograms = () => {
               }
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* Order By (single) */}
@@ -1183,7 +1318,7 @@ const FindPrograms = () => {
               selectedValue={selectedFilters.orderBy || "qs_rank"}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
 
             {/* ===== باقی فیلترها: منطق قبلی؛ فقط English مقدار اولیه از userPreferences ===== */}
@@ -1191,7 +1326,7 @@ const FindPrograms = () => {
             <DeadlineDropdown
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
               value={{
                 season: selectedFilters.deadline, // قبلاً string
                 months: selectedFilters.deadlineMonths || [], // جدید
@@ -1204,7 +1339,11 @@ const FindPrograms = () => {
                 }));
               }}
               apiBase={`${API_URL}/program-data`}
-              authToken={localStorage.getItem("token") || undefined}
+              authToken={
+                !isGuest
+                  ? localStorage.getItem("token") || undefined
+                  : undefined
+              }
               otherParams={{
                 country: selectedFilters.country,
                 degreeLevel: selectedFilters.degreeLevel,
@@ -1268,22 +1407,28 @@ const FindPrograms = () => {
               selectedValue={selectedFilters.gre || ""}
               fixedWidthClass={FILTER_WIDTH}
               buttonClassName={FILTER_BTN}
-              maxLabelChars={20}
+              maxLabelChars={17}
             />
             {/* Apply (اعمال ۷ فیلتر) */}
             <div className="mt-3 flex justify-end ">
-              <Button
-                type="button"
-                onClick={applyFilters}
-                disabled={!isApplyEnabled || isChatBusy}
-                className={`ml-2 w-full ${
-                  isApplyEnabled && !isChatBusy
-                    ? "bg-blue-600 hover:bg-blue-700 text-white"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                Filter
-              </Button>
+              {(() => {
+                const isDisabled = loading || isChatBusy; // ❗ فقط این دو حالت
+
+                return (
+                  <Button
+                    type="button"
+                    onClick={applyFilters}
+                    disabled={isDisabled}
+                    className={`ml-2 w-full ${
+                      !isDisabled
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "opacity-50 cursor-not-allowed"
+                    }`}
+                  >
+                    Filter
+                  </Button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1346,11 +1491,25 @@ const FindPrograms = () => {
                     {hasMore && (
                       <div className="mt-8 flex justify-center">
                         <Button
-                          onClick={loadMore}
+                          ref={loadMoreRef as any}
+                          onClick={() => {
+                            if (isGuest) {
+                              setShowGate(true);
+                              return;
+                            }
+                            loadMore();
+                          }}
                           disabled={loadingMore}
                           className="bg-purple-600 hover:bg-purple-700 text-white"
                         >
-                          {loadingMore ? "Loading..." : "Load More Programs"}
+                          {loadingMore ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                              Loading...
+                            </>
+                          ) : (
+                            "Load More Programs"
+                          )}
                         </Button>
                       </div>
                     )}
@@ -1391,6 +1550,31 @@ const FindPrograms = () => {
       />
 
       {loading && programs.length === 0 && !noResults && <LoadingSkeleton />}
+      <Dialog open={showGate} onOpenChange={setShowGate}>
+        <DialogContent className="sm:max-w-3xl w-[92vw]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl md:text-3xl border-b mb-2">
+              Upgrade your access level
+            </DialogTitle>
+            <DialogDescription className="mt-2">
+              To access all the free information, please sign up or log in.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-center mt-6 gap-3">
+            <Button
+              size="lg"
+              className="px-8 py-6 text-lg rounded-full"
+              onClick={() => navigate("/auth?mode=login")}
+            >
+              Quest Rewards
+            </Button>
+            <Button variant="ghost" onClick={() => setShowGate(false)}>
+              Maybe later
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

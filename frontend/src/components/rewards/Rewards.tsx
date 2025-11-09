@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import AnimatedCard from "../ui/animated-card";
 import { Separator } from "../ui/separator";
+import NavigationButtons from "../layout/NavigationButtons";
 
 const Rewards = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -126,7 +127,8 @@ const Rewards = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
-      <div className="space-y-8">
+      <NavigationButtons isDarkMode={isDarkMode} />
+      <div className="space-y-8 mt-4 md:mt-7">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

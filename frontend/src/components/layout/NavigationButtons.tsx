@@ -100,7 +100,7 @@ const NavigationButtons = ({
                 size="sm"
                 className={`
                 relative inline-flex items-center gap-1.5 md:gap-2.5
-                h-8 md:h-10 px-3 md:px-4 py-1
+                h-8 md:h-10 px-3 py-1
                 rounded-xl
                 shrink-0 md:shrink snap-start
                 min-w-max

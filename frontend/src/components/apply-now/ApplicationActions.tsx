@@ -22,19 +22,19 @@ const ApplicationActions = ({
       <Button
         variant="outline"
         size="sm"
-        className="text-purple-600 w-28 p-2 border-purple-300 hover:bg-purple-50 dark:border-purple-700 dark:hover:bg-purple-900/20"
+        className="text-purple-600 w-32  px-3  border-purple-300 hover:bg-purple-50 dark:border-purple-700 dark:hover:bg-purple-900/20"
         onClick={onApplyYourself}
       >
-        <User className="h-4 w-4 mr-1" />
+        <User className="h-3 w-3 " />
         Apply Yourself
       </Button>
       <Button
         variant="outline"
         size="sm"
-        className="text-blue-600 w-28 p-2 border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:hover:bg-blue-900/20"
+        className="text-blue-600 w-32 p-3 border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:hover:bg-blue-900/20"
         onClick={onSubmitWithUs}
       >
-        <Send className="h-4 w-4 mr-1" />
+        <Send className="h-3 w-3 " />
         Submit with Us
       </Button>
       <Button
@@ -42,9 +42,9 @@ const ApplicationActions = ({
         variant="outline"
         type="button"
         size="sm"
-        className="text-blue-600 w-28 p-2 border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:hover:bg-blue-900/20"
+        className="text-blue-600 w-32 p-3 border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:hover:bg-blue-900/20"
       >
-        <Trash className="h-4 w-4 mr-1" />
+        <Trash className="h-3 w-3 mr-1" />
         Remove
       </Button>
       {showRemove && onRemove && (
@@ -54,7 +54,7 @@ const ApplicationActions = ({
           className="text-red-600 border-red-300 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
           onClick={() => onRemove?.()}
         >
-          <FileX className="h-4 w-4 mr-1" />
+          <FileX className="h-3 w-3 mr-1" />
           Remove
         </Button>
       )}

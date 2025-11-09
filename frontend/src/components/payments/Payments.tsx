@@ -18,6 +18,7 @@ import {
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
+import NavigationButtons from "../layout/NavigationButtons";
 
 const Payments = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -207,7 +208,8 @@ const Payments = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
     >
-      <div className="space-y-8">
+      <NavigationButtons isDarkMode={isDarkMode} />
+      <div className="space-y-8 mt-4 md:mt-7">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

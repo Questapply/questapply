@@ -41,6 +41,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
+import NavigationButtons from "../layout/NavigationButtons";
 
 type Category = "sop" | "lors" | "transcripts" | "resumes";
 
@@ -704,7 +705,8 @@ const Documents = () => {
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
       >
-        <div className="space-y-8">
+        <NavigationButtons isDarkMode={isDarkMode} />
+        <div className="space-y-8 mt-4 md:mt-7">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}

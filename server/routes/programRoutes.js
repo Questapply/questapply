@@ -2,7 +2,10 @@ import express from "express";
 import db from "../config/db.config.js";
 import { decodeHtmlEntities } from "../utils/helpers.js";
 import { countryMap } from "../config/constants.js";
-
+import {
+  authenticateTokenOptional,
+  authenticateToken,
+} from "../middleware/authMiddleware.js";
 import { serialize, unserialize } from "php-serialize";
 import {
   formatDeadlineDate,
@@ -17,6 +20,12 @@ import {
 import { buildUploadsUrl } from "../config/constants.js";
 
 const router = express.Router();
+// ---- Guest flags helper ----
+function getGuestFlags(req) {
+  const guest = String(req.query.guest || "") === "1";
+  const ignoreUserDefaults = String(req.query.ignoreUserDefaults || "") === "1";
+  return { guest, ignoreUserDefaults };
+}
 
 // Helper: CSV parser
 const parseCsv = (v) =>
@@ -63,10 +72,10 @@ const parseMonthsFlexible = (input) => {
 };
 
 //API endpoint details program
-router.get("/details/:id", async (req, res) => {
+router.get("/details/:id", authenticateToken, async (req, res) => {
   try {
     const relId = req.params.id; // Use relId to be clear it's the relationship ID
-    const { email } = req.user; // Get user email from authenticated request
+    const email = req.user?.email || null; // Get user email from authenticated request
 
     // Phase 1: Concurrently fetch main program data (with all metas), user data, similar programs, and faculty highlights
     const [
@@ -645,72 +654,69 @@ router.get("/details/:id", async (req, res) => {
   }
 });
 
-// API endpoint for programs by area of study 2
-router.get("/by-area", async (req, res) => {
+router.get("/by-area", authenticateTokenOptional, async (req, res) => {
   try {
-    const { areaOfStudy } = req.query;
+    const { areaOfStudy, degreeLevel } = req.query;
 
+    // اگر areaOfStudy نیامده، ریسپانس خالی بده تا UI سلامت بماند
     if (!areaOfStudy) {
-      return res.status(400).json({ error: "Area of study ID is required" });
+      return res.json({ programs: [] });
     }
 
-    let programsData = [];
+    // اگر level آمده، باید از جدول relationship فیلتر کنیم
+    const hasLevel =
+      typeof degreeLevel === "string" && degreeLevel.trim() !== "";
+    const normLevel = hasLevel
+      ? degreeLevel === "PhD"
+        ? "Ph.D."
+        : degreeLevel // نرمال‌سازی
+      : null;
 
-    // Attempt to get programs using the simpler category_id directly (more efficient without indexes)
-    const [directProgramsData] = await db.query(
-      `
-      SELECT p.id, p.name
-      FROM qacom_wp_apply_programs p
-      WHERE p.category_id = ?
-      ORDER BY p.name ASC
-    `,
-      [areaOfStudy]
-    );
+    let sql, params;
 
-    if (directProgramsData && directProgramsData.length > 0) {
-      programsData = directProgramsData;
+    if (hasLevel) {
+      sql = `
+        SELECT DISTINCT p.id, p.name
+        FROM qacom_wp_apply_programs p
+        JOIN qacom_wp_apply_programs_relationship pr
+          ON pr.program_id = p.id
+         AND pr.status = 'publish'
+        WHERE p.category_id = ?
+          AND pr.level = ?
+        ORDER BY p.name ASC
+      `;
+      params = [areaOfStudy, normLevel];
     } else {
-      // If direct lookup fails, fall back to the more complex query via term_relationships
-      // This preserves the original logic for cases where category_id might not be directly set or reliable
-      const [relatedProgramsData] = await db.query(
-        `
+      sql = `
         SELECT p.id, p.name
         FROM qacom_wp_apply_programs p
-        JOIN qacom_wp_term_relationships tr ON p.id = tr.object_id
-        JOIN qacom_wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
-        WHERE tt.taxonomy = 'program_category' AND tt.term_id = ?
+        WHERE p.category_id = ?
         ORDER BY p.name ASC
-      `,
-        [areaOfStudy]
-      );
-      programsData = relatedProgramsData;
+      `;
+      params = [areaOfStudy];
     }
 
-    if (!programsData || programsData.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "No programs found for this area of study" });
-    }
+    const [rows] = await db.query(sql, params);
 
-    const programs = programsData.map((program) => ({
-      id: program.id,
-      name: decodeHtmlEntities(program.name),
+    const programs = (rows || []).map((r) => ({
+      id: r.id,
+      name: decodeHtmlEntities(r.name),
     }));
 
-    res.json({ programs });
-  } catch (error) {
-    console.error("Error fetching programs by area of study:", error);
-    res
-      .status(500)
-      .json({ error: "Internal server error", details: error.message });
+    return res.json({ programs });
+  } catch (err) {
+    console.error("Error /program-data/by-area:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Get all program categories (areas of study)
-router.get("/program-categories", async (req, res) => {
-  try {
-    // Get all program categories (areas of study)
-    const [categoriesData] = await db.query(`
+// ✅ این یکی هم برای مهمان‌ها باز شود
+router.get(
+  "/program-categories",
+  authenticateTokenOptional,
+  async (req, res) => {
+    try {
+      const [categoriesData] = await db.query(`
       SELECT t.term_id, t.name
       FROM qacom_wp_term_taxonomy tt
       JOIN qacom_wp_terms t ON tt.term_id = t.term_id
@@ -718,86 +724,392 @@ router.get("/program-categories", async (req, res) => {
       ORDER BY t.name ASC
     `);
 
-    if (!categoriesData || categoriesData.length === 0) {
-      return res.status(404).json({ error: "No program categories found" });
+      const categories = (categoriesData || []).map((c) => ({
+        id: c.term_id,
+        name: decodeHtmlEntities(c.name),
+      }));
+
+      return res.json({ categories });
+    } catch (error) {
+      console.error("Error fetching program categories:", error);
+      return res.status(500).json({ error: "Internal server error" });
     }
-
-    const categories = categoriesData.map((category) => ({
-      id: category.term_id,
-      name: decodeHtmlEntities(category.name),
-    }));
-
-    res.json({ categories });
-  } catch (error) {
-    console.error("Error fetching program categories:", error);
-    res
-      .status(500)
-      .json({ error: "Internal server error", details: error.message });
   }
-});
+);
 
-// /api/program-data/find
-router.get("/find", async (req, res) => {
+// GET /api/program-data/find
+
+router.get("/find", authenticateTokenOptional, async (req, res) => {
   try {
+    // ---------------- Common paging ----------------
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const offset = (page - 1) * limit;
 
-    const { email } = req.user;
+    // ---------------- Auth / flags ----------------
+    const isGuest = !req.user || !req.user.email;
+    const email = req.user?.email || null;
+    const guestFlag = String(req.query.guest || "")
+      .trim()
+      .toLowerCase();
+    const ignoreFlag = String(req.query.ignoreUserDefaults || "")
+      .trim()
+      .toLowerCase();
+    const guestMode = isGuest && (guestFlag === "1" || guestFlag === "true");
+    const ignoreUserDefaults =
+      guestFlag === "1" ||
+      guestFlag === "true" ||
+      ignoreFlag === "1" ||
+      ignoreFlag === "true";
 
+    // ---------------- QUICK PATH for Guests ----------------
+    // نسخه‌ی سبک و سریع، مخصوص وقتی که کاربر توکن ندارد و ?guest=1 است.
+    if (guestMode) {
+      try {
+        // فیلترهای ساده و سبک برای مهمان (بدون preload پروفایل و بدون JOINهای سنگین):
+        const filters = {
+          country: req.query.country || null, // s.country
+          level: req.query.degreeLevel || null, // pr.level (PhD → Ph.D.)
+          areaOfStudy: req.query.areaOfStudy || null, // p.category_id (CSV پشتیبانی)
+          program: req.query.program || null, // pr.program_id (CSV)
+          state: req.query.state || null, // s.state (name یا id را اینجا فقط name فرض می‌کنیم)
+          englishTest: req.query.english || null, // MIN_* روی pr
+          englishScore: req.query.englishScore || null, // threshold روی MIN_*
+          gpa: req.query.gpa || null, // pr.MIN_GPA <= gpa
+          school: req.query.school || null, // pr.school_id
+          gre: req.query.gre || null, // pr.GRE_requirement
+          deadline: (req.query.deadline || "").toString().toLowerCase(), // fall/spring/...
+          deadlineMonths: req.query.select_month || req.query.deadline_months,
+          orderBy: req.query.orderBy || null, // ساده‌سازی: فعلاً pr.id DESC
+        };
+
+        const englishTestMetaKeys = {
+          TOEFL: "MIN_TOEFL",
+          IELTS: "MIN_IELTS",
+          Duolingo: "MIN_Duolingo",
+          MELAB: "MIN_MELAB",
+          PTE: "MIN_PTE",
+          Cael: "MIN_Cael",
+        };
+
+        const seasonColMapLight = {
+          fall: "deadline_fall",
+          winter: "deadline_winter",
+          spring: "deadline_spring",
+          summer: "deadline_summer",
+        };
+        const deadlineCol = seasonColMapLight[filters.deadline] || null;
+
+        // WHEREهای سبک
+        let where = [`pr.status = 'publish'`];
+        let params = [];
+
+        if (filters.country) {
+          where.push("s.country = ?");
+          params.push(filters.country);
+        }
+
+        if (filters.level) {
+          const lv = filters.level === "PhD" ? "Ph.D." : String(filters.level);
+          where.push("pr.level = ?");
+          params.push(lv);
+        }
+
+        if (filters.program) {
+          const ids = String(filters.program)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (ids.length === 1) {
+            where.push("pr.program_id = ?");
+            params.push(ids[0]);
+          } else if (ids.length > 1) {
+            where.push(`pr.program_id IN (${ids.map(() => "?").join(",")})`);
+            params.push(...ids);
+          }
+        }
+
+        if (filters.areaOfStudy) {
+          const areaIds = String(filters.areaOfStudy)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (areaIds.length === 1) {
+            where.push("p.category_id = ?");
+            params.push(areaIds[0]);
+          } else if (areaIds.length > 1) {
+            where.push(
+              `p.category_id IN (${areaIds.map(() => "?").join(",")})`
+            );
+            params.push(...areaIds);
+          }
+        }
+
+        if (filters.englishTest && englishTestMetaKeys[filters.englishTest]) {
+          const col = englishTestMetaKeys[filters.englishTest];
+          if (filters.englishScore) {
+            where.push(
+              `pr.${col} IS NOT NULL AND pr.${col} != '' AND CAST(pr.${col} AS DECIMAL(6,2)) <= ?`
+            );
+            params.push(filters.englishScore);
+          } else {
+            where.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
+          }
+        }
+
+        if (filters.gpa) {
+          where.push(
+            `pr.MIN_GPA IS NOT NULL AND pr.MIN_GPA != '' AND CAST(pr.MIN_GPA AS DECIMAL(4,2)) <= ?`
+          );
+          params.push(filters.gpa);
+        }
+
+        if (filters.school) {
+          where.push("pr.school_id = ?");
+          params.push(filters.school);
+        }
+
+        if (filters.gre) {
+          where.push("pr.GRE_requirement = ?");
+          params.push(filters.gre);
+        }
+
+        if (filters.state) {
+          // سبک: فرض name (اگر ID فرستادید، بهتر است در فرانت name پاس بدهید برای guest)
+          where.push("s.state = ?");
+          params.push(String(filters.state));
+        }
+
+        if (deadlineCol) {
+          where.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
+          where.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`);
+
+          // فیلتر ماه اختیاری
+          const monthNums = parseMonthsFlexible(filters.deadlineMonths);
+          if (monthNums.length) {
+            where.push(
+              `MONTH(pr.\`${deadlineCol}\`) IN (${monthNums
+                .map(() => "?")
+                .join(",")})`
+            );
+            params.push(...monthNums);
+          }
+        }
+
+        // Base query سبک (بدون JOINهای متعدد meta)
+        let q = `
+          SELECT
+            pr.id            AS rel_id,
+            pr.program_id,
+            pr.school_id,
+            pr.level,
+            pr.title         AS program_title,
+            pr.MIN_GPA, pr.MIN_TOEFL, pr.MIN_IELTS, pr.MIN_Duolingo, pr.MIN_PTE, pr.MIN_MELAB,
+            pr.GRE_requirement,
+            pr.deadline_fall, pr.deadline_spring, pr.deadline_winter, pr.deadline_summer,
+            s.name           AS school_name,
+            s.country,
+            s.state,
+            CASE
+              WHEN s.image REGEXP '^[0-9]+$' THEN
+                (SELECT CONCAT('/uploads/', pm.meta_value)
+                 FROM qacom_wp_postmeta pm
+                 WHERE pm.post_id = CAST(s.image AS UNSIGNED)
+                 AND pm.meta_key = '_wp_attached_file')
+              ELSE s.image
+            END AS school_logo
+          FROM qacom_wp_apply_programs_relationship pr
+          JOIN qacom_wp_apply_schools s ON s.id = pr.school_id
+          JOIN qacom_wp_apply_programs p ON p.id = pr.program_id
+          WHERE ${where.join(" AND ")}
+        `;
+
+        // Order ساده (بدون join اضافه)
+        q += ` ORDER BY pr.id DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+
+        const [rows] = await db.query(q, params);
+
+        // Count سبک
+        const [cntRows] = await db.query(
+          `
+          SELECT COUNT(*) AS cnt
+          FROM qacom_wp_apply_programs_relationship pr
+          JOIN qacom_wp_apply_schools s ON s.id = pr.school_id
+          JOIN qacom_wp_apply_programs p ON p.id = pr.program_id
+          WHERE ${where.join(" AND ")}
+        `,
+          where.length ? params.slice(0, params.length - 2) : [] // بدون limit/offset
+        );
+        const total = cntRows?.[0]?.cnt || 0;
+        const hasMore = page * limit < total;
+
+        // Map سبک
+        const programs = (rows || []).map((r) => {
+          const deadlines = [];
+          const f = formatDeadlineDate(r.deadline_fall);
+          if (f) deadlines.push({ season: "Fall", date: f });
+          const w = formatDeadlineDate(r.deadline_winter);
+          if (w) deadlines.push({ season: "Winter", date: w });
+          const s = formatDeadlineDate(r.deadline_spring);
+          if (s) deadlines.push({ season: "Spring", date: s });
+          const su = formatDeadlineDate(r.deadline_summer);
+          if (su) deadlines.push({ season: "Summer", date: su });
+
+          return {
+            id: r.rel_id,
+            name: decodeHtmlEntities(r.program_title || ""),
+            degree: r.level,
+            school: decodeHtmlEntities(r.school_name || ""),
+            schoolLogo: buildUploadsUrl(r.school_logo || ""),
+            degreeType: "Program",
+            fit: "Unknown",
+            programType: null,
+            duration:
+              r.level === "Ph.D."
+                ? "4 Years"
+                : r.level === "Master"
+                ? "2 Years"
+                : r.level === "Bachelor"
+                ? "4 Years"
+                : "",
+            format: null,
+            language: "English",
+            campus: "On Campus",
+            ranking: 0,
+            qsRanking: "",
+            deadline: deadlines,
+            requirements: {
+              toefl: { min: Number(r.MIN_TOEFL) || 0, avg: 0 },
+              ielts: { min: Number(r.MIN_IELTS) || 0, avg: 0 },
+              duolingo: { min: Number(r.MIN_Duolingo) || 0, avg: 0 },
+              pte: { min: Number(r.MIN_PTE) || 0, avg: 0 },
+              gpa: { min: Number(r.MIN_GPA) || 0, avg: 0 },
+              gre: {
+                status: r.GRE_requirement || "N/A",
+                total: { avg: 0 },
+                verbal: { avg: 0 },
+                quantitative: { avg: 0 },
+                writing: { avg: 0 },
+              },
+            },
+            costs: {
+              residents: {
+                tuition: 0,
+                fees: 0,
+                healthInsurance: 0,
+                livingCost: 0,
+              },
+              international: {
+                tuition: 0,
+                fees: 0,
+                healthInsurance: 0,
+                livingCost: 0,
+              },
+            },
+            applicationFees: { international: 0, us: 0 },
+            otherRequirements: {
+              transcript: false,
+              resumeCV: false,
+              applicationForm: false,
+              statementOfPurpose: false,
+              recommendationLetters: 0,
+            },
+            admissionRate: 0,
+            contact: {
+              tel: "",
+              email: "",
+              website: "",
+              address: decodeHtmlEntities(r.school_name || ""),
+            },
+            description: "",
+            courseStructure: "",
+            overview: "",
+            favorite: false,
+            country: r.country || "",
+            state: r.state || "",
+          };
+        });
+
+        return res.json({
+          programs,
+          count: total,
+          userPreferences: {}, // مهمان: بدون پروفایل
+          hasMore,
+          auth: {
+            isGuest: true,
+            requiresLoginForActions: true,
+            loginUrl: "/sign-in",
+          },
+          message: programs.length
+            ? ""
+            : "No programs found for the selected filters",
+        });
+      } catch (e) {
+        console.error("Guest mode error:", e);
+        return res
+          .status(500)
+          .json({ error: "Internal server error (guest mode)" });
+      }
+    }
+
+    // ---------------- FULL PATH (original logic) for Logged-in / Non-guest ----------------
+    // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
     // -------- Preload user + lookups (+ states for mapping id->name) --------
     const [
       userDataResult,
       countriesDataResult,
       categoriesDataResult,
-      statesDataResult, // ⬅️ اضافه شد برای map آیدی→نام ایالت‌ها (همان منبع /api/states)
+      statesDataResult,
     ] = await Promise.all([
-      db.query(
-        `
-          SELECT u.ID, um.meta_key, um.meta_value
-          FROM qacom_wp_users u
-          LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
-          WHERE u.user_email = ?
-        `,
-        [email]
-      ),
+      !isGuest && !ignoreUserDefaults
+        ? db.query(
+            `
+            SELECT u.ID, um.meta_key, um.meta_value
+            FROM qacom_wp_users u
+            LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
+            WHERE u.user_email = ?
+          `,
+            [email]
+          )
+        : Promise.resolve([[]]),
+
       db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy tt
-          JOIN qacom_wp_terms t ON t.term_id = tt.term_id
-          WHERE tt.taxonomy = 'place' AND tt.parent = 0
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON t.term_id = tt.term_id
+        WHERE tt.taxonomy = 'place' AND tt.parent = 0
       `),
+
       db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy pr
-          JOIN qacom_wp_terms t ON t.term_id = pr.term_id
-          WHERE pr.taxonomy = 'program_category'
-          ORDER BY t.name ASC
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy pr
+        JOIN qacom_wp_terms t ON t.term_id = pr.term_id
+        WHERE pr.taxonomy = 'program_category'
+        ORDER BY t.name ASC
       `),
+
       db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy tt
-          JOIN qacom_wp_terms t ON t.term_id = tt.term_id
-          WHERE tt.taxonomy = 'place' AND tt.parent != 0
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON t.term_id = tt.term_id
+        WHERE tt.taxonomy = 'place' AND tt.parent != 0
       `),
     ]);
 
-    const userData = userDataResult[0];
-    const countriesData = countriesDataResult[0] || [];
-    const categoriesData = categoriesDataResult[0] || [];
+    const userData = Array.isArray(userDataResult?.[0])
+      ? userDataResult[0]
+      : [];
+    const countriesData = countriesDataResult?.[0] || [];
+    const categoriesData = categoriesDataResult?.[0] || [];
     const statesData = statesDataResult?.[0] || [];
 
-    if (!userData || userData.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Map: stateId → stateName (decode)
     const stateIdToNameMap = statesData.reduce((acc, s) => {
       acc[String(s.term_id)] = decodeHtmlEntities(s.name);
       return acc;
     }, {});
 
-    // -------- Build userPreferences (مثل قبل) --------
+    // -------- Build userPreferences --------
     let userPreferences = {
       country: null,
       level: null,
@@ -816,45 +1128,46 @@ router.get("/find", async (req, res) => {
       actTotal: null,
     };
 
-    userData.forEach((meta) => {
-      if (meta.meta_key === "application_country")
-        userPreferences.country = meta.meta_value;
-      else if (meta.meta_key === "application_level")
-        userPreferences.level = meta.meta_value;
-      else if (meta.meta_key === "application_program")
-        userPreferences.program = meta.meta_value;
-      else if (meta.meta_key === "application_english_test")
-        userPreferences.englishTest = meta.meta_value;
-      else if (meta.meta_key === "application_english_score")
-        userPreferences.englishScore = meta.meta_value;
-      else if (meta.meta_key === "application_gpa")
-        userPreferences.gpa = meta.meta_value;
-      else if (meta.meta_key === "gre_test")
-        userPreferences.greTest = meta.meta_value;
-      else if (meta.meta_key === "application_gre_total")
-        userPreferences.greTotal = meta.meta_value;
-      else if (meta.meta_key === "application_gre_verbal")
-        userPreferences.greVerbal = meta.meta_value;
-      else if (meta.meta_key === "application_gre_quantitative")
-        userPreferences.greQuantitative = meta.meta_value;
-      else if (meta.meta_key === "application_gre_writing")
-        userPreferences.greWriting = meta.meta_value;
-      else if (meta.meta_key === "lsat_test")
-        userPreferences.lsatTest = meta.meta_value;
-      else if (meta.meta_key === "application_sat_total")
-        userPreferences.satTotal = meta.meta_value;
-      else if (meta.meta_key === "application_act_total")
-        userPreferences.actTotal = meta.meta_value;
-    });
+    if (!isGuest && !ignoreUserDefaults) {
+      userData.forEach((meta) => {
+        if (meta.meta_key === "application_country")
+          userPreferences.country = meta.meta_value;
+        else if (meta.meta_key === "application_level")
+          userPreferences.level = meta.meta_value;
+        else if (meta.meta_key === "application_program")
+          userPreferences.program = meta.meta_value;
+        else if (meta.meta_key === "application_english_test")
+          userPreferences.englishTest = meta.meta_value;
+        else if (meta.meta_key === "application_english_score")
+          userPreferences.englishScore = meta.meta_value;
+        else if (meta.meta_key === "application_gpa")
+          userPreferences.gpa = meta.meta_value;
+        else if (meta.meta_key === "gre_test")
+          userPreferences.greTest = meta.meta_value;
+        else if (meta.meta_key === "application_gre_total")
+          userPreferences.greTotal = meta.meta_value;
+        else if (meta.meta_key === "application_gre_verbal")
+          userPreferences.greVerbal = meta.meta_value;
+        else if (meta.meta_key === "application_gre_quantitative")
+          userPreferences.greQuantitative = meta.meta_value;
+        else if (meta.meta_key === "application_gre_writing")
+          userPreferences.greWriting = meta.meta_value;
+        else if (meta.meta_key === "lsat_test")
+          userPreferences.lsatTest = meta.meta_value;
+        else if (meta.meta_key === "application_sat_total")
+          userPreferences.satTotal = meta.meta_value;
+        else if (meta.meta_key === "application_act_total")
+          userPreferences.actTotal = meta.meta_value;
+      });
+    }
 
-    userPreferences.availableCountries = countriesData.map((country) => ({
-      country: country.term_id,
-      name: country.name,
+    userPreferences.availableCountries = countriesData.map((c) => ({
+      country: c.term_id,
+      name: c.name,
     }));
-
-    userPreferences.availableAreasOfStudy = categoriesData.map((category) => ({
-      id: category.term_id,
-      name: decodeHtmlEntities(category.name),
+    userPreferences.availableAreasOfStudy = categoriesData.map((cat) => ({
+      id: cat.term_id,
+      name: decodeHtmlEntities(cat.name),
     }));
 
     if (userPreferences.program) {
@@ -891,63 +1204,65 @@ router.get("/find", async (req, res) => {
     }
 
     if (userPreferences.areaOfStudy || userPreferences.program) {
-      let availableProgramsQuery = `
-        SELECT p.id, p.name
-        FROM qacom_wp_apply_programs p
-      `;
-      let availableProgramsWhere = [];
-      let availableProgramsParams = [];
+      let availableProgramsQuery = `SELECT p.id, p.name FROM qacom_wp_apply_programs p`;
+      let whereParts = [];
+      let whereParams = [];
 
       if (userPreferences.areaOfStudy) {
-        availableProgramsWhere.push("p.category_id = ?");
-        availableProgramsParams.push(userPreferences.areaOfStudy.id);
+        whereParts.push("p.category_id = ?");
+        whereParams.push(userPreferences.areaOfStudy.id);
       } else if (userPreferences.program) {
-        availableProgramsWhere.push("p.id = ?");
-        availableProgramsParams.push(userPreferences.program);
+        whereParts.push("p.id = ?");
+        whereParams.push(userPreferences.program);
       }
 
-      if (availableProgramsWhere.length > 0) {
-        availableProgramsQuery += ` WHERE ${availableProgramsWhere.join(
-          " AND "
-        )}`;
-      }
-      availableProgramsQuery += " ORDER BY p.name ASC";
+      if (whereParts.length)
+        availableProgramsQuery += ` WHERE ${whereParts.join(" AND ")}`;
+      availableProgramsQuery += ` ORDER BY p.name ASC`;
 
       const [programsData] = await db.query(
         availableProgramsQuery,
-        availableProgramsParams
+        whereParams
       );
       if (programsData && programsData.length > 0) {
-        userPreferences.availablePrograms = programsData.map((program) => ({
-          id: program.id,
-          name: decodeHtmlEntities(program.name),
+        userPreferences.availablePrograms = programsData.map((pr) => ({
+          id: pr.id,
+          name: decodeHtmlEntities(pr.name),
         }));
       }
     }
 
-    // -------- Filters (با پشتیبانی CSV برای state/area/program) --------
+    // -------- Filters --------
+    const useUserDefaults =
+      !isGuest &&
+      !ignoreUserDefaults &&
+      !(guestFlag === "1" || guestFlag === "true");
     const filters = {
-      country: req.query.country || userPreferences.country,
-      level: req.query.degreeLevel || userPreferences.level,
-      program: req.query.program || userPreferences.program, // CSV ok
+      country:
+        req.query.country || (useUserDefaults ? userPreferences.country : null),
+      level:
+        req.query.degreeLevel ||
+        (useUserDefaults ? userPreferences.level : null),
+      program:
+        req.query.program || (useUserDefaults ? userPreferences.program : null),
       areaOfStudy:
         req.query.areaOfStudy ||
-        (userPreferences.areaOfStudy && userPreferences.areaOfStudy.id), // CSV ok
-      englishTest: req.query.english || userPreferences.englishTest,
-      gpa: req.query.gpa || userPreferences.gpa,
-      englishScore: req.query.englishScore || userPreferences.englishScore,
-      state: req.query.state || null, // CSV ok (id or name)
+        (useUserDefaults && userPreferences.areaOfStudy
+          ? userPreferences.areaOfStudy.id
+          : null),
+      englishTest:
+        req.query.english ||
+        (useUserDefaults ? userPreferences.englishTest : null),
+      gpa: req.query.gpa || (useUserDefaults ? userPreferences.gpa : null),
+      englishScore:
+        req.query.englishScore ||
+        (useUserDefaults ? userPreferences.englishScore : null),
+      state: req.query.state || null,
       school: req.query.school || null,
       gre: req.query.gre || null,
       deadline: req.query.deadline || null,
       orderBy: req.query.orderBy || null,
     };
-    const deadlineRaw = (req.query.deadline || "").toString(); // "fall" یا "Fall"
-    const deadlineKey = deadlineRaw.toLowerCase(); // "fall"
-    const deadlineCol = seasonColMap[deadlineKey]; // 'deadline_fall' | undefined
-    const monthNums = parseMonthsFlexible(
-      req.query.select_month || req.query.deadline_months
-    );
 
     const englishTestMetaKeys = {
       TOEFL: "MIN_TOEFL",
@@ -958,7 +1273,14 @@ router.get("/find", async (req, res) => {
       Cael: "MIN_Cael",
     };
 
-    // -------- Base SELECT --------
+    const deadlineRaw = (filters.deadline || "").toString();
+    const deadlineKey = deadlineRaw.toLowerCase();
+    const deadlineCol = seasonColMap[deadlineKey];
+    const monthNums = parseMonthsFlexible(
+      req.query.select_month || req.query.deadline_months
+    );
+
+    // -------- Base SELECT (original) --------
     let baseQuery = `
       SELECT
         pr.id as rel_id,
@@ -1086,7 +1408,7 @@ router.get("/find", async (req, res) => {
       WHERE pr.status = 'publish'
     `;
 
-    // -------- WHEREs --------
+    // -------- WHEREs (original) --------
     let whereClauses = [];
     let params = [];
 
@@ -1101,7 +1423,6 @@ router.get("/find", async (req, res) => {
       params.push(level);
     }
 
-    // Program (CSV پشتیبانی)
     if (filters.program) {
       const progIds = parseCsv(filters.program).filter(Boolean);
       if (progIds.length === 1) {
@@ -1115,7 +1436,6 @@ router.get("/find", async (req, res) => {
       }
     }
 
-    // Area of Study (CSV پشتیبانی)
     if (filters.areaOfStudy) {
       const areaIds = parseCsv(filters.areaOfStudy).filter(Boolean);
       if (areaIds.length === 1) {
@@ -1129,29 +1449,23 @@ router.get("/find", async (req, res) => {
       }
     }
 
-    // English (وجود حداقل نمره)
-    // --- English filter ---
     if (filters.englishTest && englishTestMetaKeys[filters.englishTest]) {
       const col = englishTestMetaKeys[filters.englishTest];
-
       if (filters.englishScore) {
-        // آزمون + سقف نمره: فقط برنامه‌هایی که حداقل نمره‌شان <= نمره‌ کاربر باشد
         whereClauses.push(
           `pr.${col} IS NOT NULL AND pr.${col} != '' AND CAST(pr.${col} AS DECIMAL(6,2)) <= ?`
         );
         params.push(filters.englishScore);
       } else {
-        // فقط آزمون انتخاب شده: وجود حداقل نمره
         whereClauses.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
       }
     }
 
-    // State (CSV; id یا name ⇒ name; IN)
     if (filters.state) {
       const rawStates = parseCsv(filters.state);
       if (rawStates.length) {
         const stateNames = rawStates
-          .map((x) => stateIdToNameMap[x] || x) // اگر id بود، name از Map
+          .map((x) => stateIdToNameMap[x] || x)
           .map((s) => s && s.trim())
           .filter(Boolean);
 
@@ -1167,7 +1481,6 @@ router.get("/find", async (req, res) => {
       }
     }
 
-    // GPA
     if (filters.gpa) {
       whereClauses.push(
         `(pr.MIN_GPA IS NOT NULL AND pr.MIN_GPA != '' AND CAST(pr.MIN_GPA AS DECIMAL(4,2)) <= ?)`
@@ -1175,24 +1488,19 @@ router.get("/find", async (req, res) => {
       params.push(filters.gpa);
     }
 
-    // School
     if (filters.school) {
       whereClauses.push("pr.school_id = ?");
       params.push(filters.school);
     }
 
-    // GRE
     if (filters.gre) {
       whereClauses.push("pr.GRE_requirement = ?");
       params.push(filters.gre);
     }
 
-    // Deadline (یک ستون از چهار تا)
     if (deadlineCol) {
-      whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
-      whereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`);
-
-      // اگر ماه هم آمده باشد، فیلتر ماه را هم اعمال کن
+      whereClauses.push(`CAST(pr.\`${deadlineCol}\`) AS CHAR IS NOT NULL`);
+      whereClauses.push(`CAST(pr.\`${deadlineCol}\`) AS CHAR != '0000-00-00'`);
       if (monthNums.length) {
         whereClauses.push(
           `MONTH(pr.\`${deadlineCol}\`) IN (${monthNums
@@ -1203,29 +1511,24 @@ router.get("/find", async (req, res) => {
       }
     }
 
-    // الصاق WHERE
     let finalBaseQuery = baseQuery;
-    if (whereClauses.length > 0) {
+    if (whereClauses.length)
       finalBaseQuery += " AND " + whereClauses.join(" AND ");
-    }
 
-    // Order (فعلاً همان QS → سپس نام برنامه و دانشگاه)
     finalBaseQuery += ` ORDER BY
-        CASE
-            WHEN qsRanking IS NULL OR qsRanking = '' OR NOT (qsRanking REGEXP '^[0-9]+$') THEN 999999999
-            ELSE CAST(qsRanking AS UNSIGNED)
-        END ASC,
-        program_title_from_pr ASC,
-        school_name ASC`;
+      CASE
+        WHEN qsRanking IS NULL OR qsRanking = '' OR NOT (qsRanking REGEXP '^[0-9]+$') THEN 999999999
+        ELSE CAST(qsRanking AS UNSIGNED)
+      END ASC,
+      program_title_from_pr ASC,
+      school_name ASC
+      LIMIT ? OFFSET ?`;
 
-    // Pagination
-    finalBaseQuery += " LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
-    // اجرا
     const [programRows] = await db.query(finalBaseQuery, params);
 
-    // -------- Count Query (با پشتیبانی CSV و state IN) --------
+    // -------- Count (original) --------
     let countQuery = `
       SELECT COUNT(DISTINCT pr.id) as count
       FROM qacom_wp_apply_programs_relationship pr
@@ -1280,7 +1583,6 @@ router.get("/find", async (req, res) => {
         countWhereClauses.push(`pr.${col} IS NOT NULL AND pr.${col} != ''`);
       }
     }
-
     if (filters.state) {
       const rawStates = parseCsv(filters.state);
       if (rawStates.length) {
@@ -1288,7 +1590,6 @@ router.get("/find", async (req, res) => {
           .map((x) => stateIdToNameMap[x] || x)
           .map((s) => s && s.trim())
           .filter(Boolean);
-
         if (stateNames.length === 1) {
           countWhereClauses.push("s.state = ?");
           countParams.push(stateNames[0]);
@@ -1315,9 +1616,9 @@ router.get("/find", async (req, res) => {
       countParams.push(filters.gre);
     }
     if (deadlineCol) {
-      countWhereClauses.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
+      countWhereClauses.push(`CAST(pr.\`${deadlineCol}\`) AS CHAR IS NOT NULL`);
       countWhereClauses.push(
-        `CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`
+        `CAST(pr.\`${deadlineCol}\`) AS CHAR != '0000-00-00'`
       );
       if (monthNums.length) {
         countWhereClauses.push(
@@ -1328,18 +1629,16 @@ router.get("/find", async (req, res) => {
         countParams.push(...monthNums);
       }
     }
-    if (countWhereClauses.length > 0) {
+    if (countWhereClauses.length)
       countQuery += " AND " + countWhereClauses.join(" AND ");
-    }
 
     const [countRows] = await db.query(countQuery, countParams);
     const total = countRows[0]?.count || 0;
     const hasMore = page * limit < total;
 
-    // -------- Map rows → programs (مثل قبل) --------
+    // -------- Map rows → programs (original mapping) --------
     let programs = (programRows || []).map((row) => {
       const fullSchoolLogoUrl = buildUploadsUrl(row.school_logo || "");
-
       let program_duration = "";
       if (row.level === "Ph.D.") program_duration = "4 Years";
       else if (row.level === "Master") program_duration = "2 Years";
@@ -1399,9 +1698,7 @@ router.get("/find", async (req, res) => {
           },
           gre: {
             status: row.GRE_requirement || "N/A",
-            total: {
-              avg: row.AVG_GRE_total ? Number(row.AVG_GRE_total) : 0,
-            },
+            total: { avg: row.AVG_GRE_total ? Number(row.AVG_GRE_total) : 0 },
             verbal: {
               avg: row.AVG_GRE_verbal ? Number(row.AVG_GRE_verbal) : 0,
             },
@@ -1450,10 +1747,10 @@ router.get("/find", async (req, res) => {
             : 0,
         },
         otherRequirements: {
-          transcript: row.extra_recom ? true : false,
-          resumeCV: row.extra_recom ? true : false,
-          applicationForm: row.extra_recom ? true : false,
-          statementOfPurpose: row.extra_SOP ? true : false,
+          transcript: !!row.extra_recom,
+          resumeCV: !!row.extra_recom,
+          applicationForm: !!row.extra_recom,
+          statementOfPurpose: !!row.extra_SOP,
           recommendationLetters: row.extra_recom_value
             ? parseInt(row.extra_recom_value) || 0
             : 0,
@@ -1481,16 +1778,17 @@ router.get("/find", async (req, res) => {
       count: total,
       userPreferences,
       hasMore,
+      auth: { isGuest, requiresLoginForActions: true, loginUrl: "/sign-in" },
       message:
         programs.length === 0
           ? "No programs found for the selected filters"
           : "",
     };
 
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Error fetching programs:", error);
-    res.status(500).json({
+    return res.status(500).json({
       error: "Internal server error",
       details: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
@@ -1499,7 +1797,7 @@ router.get("/find", async (req, res) => {
 });
 
 // API endpoint to toggle program in user's program list
-router.post("/program-list", async (req, res) => {
+router.post("/program-list", authenticateToken, async (req, res) => {
   try {
     const { programId, action } = req.body; // action: 'add' or 'remove'
     const { email } = req.user;
@@ -1638,10 +1936,8 @@ router.post("/program-list", async (req, res) => {
   }
 });
 
-
-
 // GET /program-data/program-list — deadlines exactly like /find (per row, no school-level aggregation)
-router.get("/program-list", async (req, res) => {
+router.get("/program-list", authenticateToken, async (req, res) => {
   try {
     const schoolId =
       parseInt(
@@ -1860,7 +2156,7 @@ router.get("/program-list", async (req, res) => {
 
 // POST /favorites/programs
 
-router.post("/favorites", async (req, res) => {
+router.post("/favorites", authenticateToken, async (req, res) => {
   try {
     const { programId, action } = req.body;
     const { email } = req.user || {};
@@ -1964,7 +2260,7 @@ router.post("/favorites", async (req, res) => {
 
 // GET /favorites/programs
 
-router.get("/favorites", async (req, res) => {
+router.get("/favorites", authenticateToken, async (req, res) => {
   try {
     const { email } = req.user || {};
     const metaKey = "favorite_programs";
@@ -2012,7 +2308,7 @@ router.get("/favorites", async (req, res) => {
 });
 
 // /api/program-data/compare
-router.get("/compare", async (req, res) => {
+router.get("/compare", authenticateToken, async (req, res) => {
   try {
     // 1) Parse & validate ids
     const idsParam = (req.query.ids || "").toString().trim();
@@ -2265,7 +2561,7 @@ router.get("/compare", async (req, res) => {
   }
 });
 
-router.get("/search", async (req, res) => {
+router.get("/search", authenticateToken, async (req, res) => {
   try {
     const qRaw = String(req.query.q || "").trim();
     if (!qRaw) return res.json({ programs: [] });
@@ -2336,12 +2632,11 @@ router.get("/search", async (req, res) => {
 });
 
 // /api/program-data/deadline-months
-router.get("/deadline-months", async (req, res) => {
+router.get("/deadline-months", authenticateToken, async (req, res) => {
   try {
     const deadlineKey = String(req.query.deadline || "").toLowerCase(); // fall|spring|winter|summer
     const deadlineCol = seasonColMap[deadlineKey];
     if (!deadlineCol) return res.json({ months: [] });
-
 
     let whereClauses = [`pr.status = 'publish'`];
     let params = [];

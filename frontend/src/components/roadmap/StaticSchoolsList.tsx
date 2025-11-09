@@ -104,7 +104,7 @@ function StaticSchoolList() {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             Find Schools helps you explore educational institutions worldwide
           </div>
         </motion.div>
@@ -159,15 +159,15 @@ function StaticSchoolList() {
               className={cn(
                 "flex items-center gap-2 px-4  rounded-full text-xs border !py-1.5 ",
 
-                "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+                "bg-sky-300 font-semibold dark:bg-gray-800 border-gray-400 dark:border-gray-700 text-gray-800 dark:text-gray-300",
                 "hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:border-purple-200 dark:hover:border-purple-700 hover:shadow-sm",
                 "transition-all duration-300 ease-in-out focus:outline-none",
 
                 button.label
-                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-gray-50 border-purple-200 dark:border-purple-700 "
+                  ? "bg-purple-400 dark:bg-purple-900/30 font-semibold  dark:text-gray-50 border-gray-400 dark:border-purple-700 text-violet-700"
                   : "",
 
-                "opacity-50 cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-none"
+                "opacity-50 cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-700 hover:shadow-none"
               )}
             >
               <span>{button.icon}</span>
@@ -264,7 +264,7 @@ function StaticSchoolList() {
                   <div className="flex gap-2 mt-2">
                     <Button
                       variant="outline"
-                      className="flex-1 bg-purple-900/20 text-purple-400 border-purple-800 hover:bg-purple-800/30 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-800/30"
+                      className="flex-1 bg-purple-900/20 text-purple-400 border-purple-500 hover:bg-purple-800/30 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-800/30"
                     >
                       School Details
                     </Button>
@@ -272,7 +272,7 @@ function StaticSchoolList() {
                       variant="outline"
                       className="flex items-center gap-1 
                    
-                      bg-green-900/20 text-green-400 border-green-800 hover:bg-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800/30"
+                      bg-green-900/20 text-green-400 border-green-500 hover:bg-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800/30"
                     >
                       <GitCompare className="h-4 w-4" />
                       Compare
@@ -284,7 +284,7 @@ function StaticSchoolList() {
                 <div className="flex-grow">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     {/* Cost */}
-                    <div className="bg-gray-100 dark:bg-gray-800/60 p-4 rounded-lg">
+                    <div className="bg-gray-200/70 dark:bg-gray-800/60 p-4 rounded-lg">
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Tuition Cost
                       </h4>
@@ -321,7 +321,7 @@ function StaticSchoolList() {
                     </div>
 
                     {/* Statistics */}
-                    <div className="bg-gray-100 dark:bg-gray-800/60 p-4 rounded-lg">
+                    <div className="bg-gray-200/70 dark:bg-gray-800/60 p-4 rounded-lg">
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Statistics
                       </h4>

@@ -571,22 +571,29 @@ export default function SOPEditor() {
 
   return (
     <div
-      className="rounded-xl border flex flex-col h-full min-h-0 overflow-hidden"
-      style={{ background: "#111827", borderColor: "#25324a" }}
+      className="rounded-xl border flex flex-col h-full min-h-0 overflow-hidden
+               bg-white border-slate-200
+               dark:bg-slate-900 dark:border-slate-700"
     >
       {/* toolbar */}
-      <div className="p-4 border-b" style={{ borderColor: "#25324a" }}>
+      <div
+        className="p-4 rounded-xl border
+                 bg-white border-slate-200
+                 dark:bg-slate-900 dark:border-slate-700"
+      >
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
               variant="outline"
-              style={{ background: "#0b213a", borderColor: "#25324a" }}
+              className="bg-slate-50 border-slate-200 text-slate-700
+                       dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-300"
             >
               Target: CS Ph.D. • Stanford
             </Badge>
             <Badge
               variant="outline"
-              style={{ background: "#0b213a", borderColor: "#25324a" }}
+              className="bg-slate-50 border-slate-200 text-slate-700
+                       dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-300"
             >
               Words ~ {totalWords}
             </Badge>
@@ -597,12 +604,9 @@ export default function SOPEditor() {
               size="sm"
               variant="outline"
               onClick={handleReset}
-              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
-              style={{
-                background: "#0e1526",
-                borderColor: "#25324a",
-                color: "#9ca3af",
-              }}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm
+                       bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100
+                       dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               <RotateCcw className="w-4 h-4 mr-1" /> Reset
             </Button>
@@ -610,31 +614,27 @@ export default function SOPEditor() {
               size="sm"
               variant="outline"
               onClick={handlePreview}
-              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
-              style={{
-                background: "#0e1526",
-                borderColor: "#25324a",
-                color: "#9ca3af",
-              }}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm
+                       bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100
+                       dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               Preview
             </Button>
             <Button
               size="sm"
               onClick={() => setExportOpen(true)}
-              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
-              style={{
-                background: "#7c3aed",
-                color: "white",
-              }}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm
+                       bg-violet-600 text-white hover:bg-violet-700
+                       dark:bg-violet-500 dark:hover:bg-violet-600"
             >
               <Download className="w-4 h-4 mr-1" /> Export
             </Button>
             <Button
               size="sm"
               onClick={handleSaveAndCreate}
-              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm"
-              style={{ background: "#22c55e", color: "white" }}
+              className="h-8 px-2.5 text-xs md:h-9 md:px-4 md:text-sm
+                       bg-emerald-600 text-white hover:bg-emerald-700
+                       dark:bg-emerald-500 dark:hover:bg-emerald-600"
             >
               <SaveIcon className="w-4 h-4 mr-1" /> Save & Create
             </Button>
@@ -646,8 +646,9 @@ export default function SOPEditor() {
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {/* Target / Program / Level / University */}
         <div
-          className="p-4 rounded-xl border mb-4"
-          style={{ background: "#111827", borderColor: "#25324a" }}
+          className="p-4 rounded-xl border mb-4
+                   bg-white border-slate-200
+                   dark:bg-slate-900 dark:border-slate-700"
         >
           <div className="flex items-center gap-3 flex-wrap mb-3">
             <h3 className="font-medium">
@@ -655,12 +656,8 @@ export default function SOPEditor() {
             </h3>
             <Badge
               variant="outline"
-              className="text-xs"
-              style={{
-                background: "#052e1a",
-                borderColor: "#14532d",
-                color: "#22c55e",
-              }}
+              className="text-xs bg-emerald-50 border-emerald-200 text-emerald-700
+                       dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300"
             >
               Required
             </Badge>
@@ -759,20 +756,15 @@ export default function SOPEditor() {
 
             <div>
               <div className="mb-2">
-                <span
-                  className="text-[12px] md:text-sm font-medium"
-                  style={{ color: "#9ca3af" }}
-                >
+                <span className="text-[12px] md:text-sm font-medium text-slate-500 dark:text-slate-400">
                   Preview
                 </span>
               </div>
               <div
-                className="min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap"
-                style={{
-                  borderColor: "#25324a",
-                  background: "#0b1020",
-                  color: "#e5e7eb",
-                }}
+                className="
+                min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap
+                border-slate-200 bg-slate-50 text-slate-800
+                dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {target.level ||
                 target.program ||
@@ -786,7 +778,7 @@ export default function SOPEditor() {
                     {"\n"}- <strong>Country</strong>: {target.country || "—"}.
                   </>
                 ) : (
-                  <em style={{ color: "#9ca3af" }}>
+                  <em className="text-slate-500 dark:text-slate-400">
                     Fill Level, Program, University, Country…
                   </em>
                 )}
@@ -794,8 +786,9 @@ export default function SOPEditor() {
               <div className="flex items-center justify-between mt-2">
                 <Button
                   size="sm"
-                  className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
-                  style={{ background: "#22c55e", color: "white" }}
+                  className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm
+                           bg-emerald-600 text-white hover:bg-emerald-700
+                           dark:bg-emerald-500 dark:hover:bg-emerald-600"
                   onClick={async () => {
                     const compiled =
                       `<strong>- Level</strong>: ${target.level || ""}<br>` +
@@ -860,8 +853,9 @@ export default function SOPEditor() {
           return (
             <div
               key={key}
-              className="p-4 rounded-xl border"
-              style={{ background: "#111827", borderColor: "#25324a" }}
+              className="p-4 rounded-xl border
+                       bg-white border-slate-200
+                       dark:bg-slate-900 dark:border-slate-700"
             >
               {/* header */}
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
@@ -872,12 +866,11 @@ export default function SOPEditor() {
                     return (
                       <Badge
                         variant="outline"
-                        className="text-xs"
-                        style={{
-                          background: required ? "#052e1a" : "#0b213a",
-                          borderColor: required ? "#14532d" : "#25324a",
-                          color: required ? "#22c55e" : "#9ca3af",
-                        }}
+                        className={`text-xs ${
+                          required
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300"
+                            : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-300"
+                        }`}
                       >
                         {required ? "Required" : "Optional"}
                       </Badge>
@@ -893,19 +886,14 @@ export default function SOPEditor() {
                     value={val}
                     onChange={(e) => updateSection(key, e.target.value)}
                     placeholder={SECTION_DEFAULTS[key]}
-                    className="min-h-28 md:min-h-32 text-[13px] md:text-sm"
-                    style={{
-                      background: "#0e1526",
-                      borderColor: "#25324a",
-                    }}
+                    className="min-h-28 md:min-h-32 text-[13px] md:text-sm
+                             bg-white border-slate-200 text-slate-900 placeholder-slate-400
+                             dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
                   />
                 </div>
                 <div>
                   <div className="mb-2 flex justify-between items-center">
-                    <span
-                      className="text-[12px] md:text-sm font-medium"
-                      style={{ color: "#9ca3af" }}
-                    >
+                    <span className="text-[12px] md:text-sm font-medium text-slate-500 dark:text-slate-400">
                       Preview
                     </span>
                     <div className="flex flex-wrap gap-1">
@@ -913,7 +901,9 @@ export default function SOPEditor() {
                         size="sm"
                         variant="outline"
                         onClick={() => applyQuickEdit(key, "improve")}
-                        className="text-xs gap-1"
+                        className="text-xs gap-1
+                                 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100
+                                 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         <Sparkles className="w-3 h-3" /> Improve
                       </Button>
@@ -921,7 +911,9 @@ export default function SOPEditor() {
                         size="sm"
                         variant="outline"
                         onClick={() => applyQuickEdit(key, "shorten")}
-                        className="text-xs gap-1"
+                        className="text-xs gap-1
+                                 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100
+                                 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         <Scissors className="w-3 h-3" /> Shorten
                       </Button>
@@ -929,35 +921,32 @@ export default function SOPEditor() {
                         size="sm"
                         variant="outline"
                         onClick={() => applyQuickEdit(key, "expand")}
-                        className="text-xs gap-1"
+                        className="text-xs gap-1
+                                 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100
+                                 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         <Expand className="w-3 h-3" /> Expand
                       </Button>
                     </div>
                   </div>
                   <div
-                    className="min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap"
-                    style={{
-                      borderColor: "#25324a",
-                      background: "#0b1020",
-                      color: "#e5e7eb",
-                    }}
+                    className="min-h-32 p-3 rounded border-2 border-dashed text-[13px] md:text-sm whitespace-pre-wrap
+                             border-slate-200 bg-slate-50 text-slate-800
+                             dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   >
                     {val || SECTION_DEFAULTS[key]}
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <Button
                       size="sm"
-                      className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm"
-                      style={{ background: "#22c55e", color: "white" }}
+                      className="h-8 px-3 text-[12px] md:h-9 md:px-4 md:text-sm
+                               bg-emerald-600 text-white hover:bg-emerald-700
+                               dark:bg-emerald-500 dark:hover:bg-emerald-600"
                       onClick={() => saveOneSection(key)}
                     >
                       <SaveIcon className="w-3 h-3 mr-1" /> Save
                     </Button>
-                    <span
-                      className="text-[12px] md:text-xs"
-                      style={{ color: "#9ca3af" }}
-                    >
+                    <span className="text-[12px] md:text-xs text-slate-500 dark:text-slate-400">
                       Word ~ {words}
                     </span>
                   </div>
@@ -1010,10 +999,9 @@ export default function SOPEditor() {
           <div className="max-h-[70vh]">
             <iframe
               title="SOP Preview"
-              className="w-full h-[60vh] rounded-md border"
+              className="w-full h-[60vh] rounded-md border bg-white"
               srcDoc={previewHtml}
               sandbox="allow-same-origin"
-              style={{ background: "white" }}
             />
           </div>
 

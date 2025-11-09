@@ -18,7 +18,7 @@ import Blog from "@/pages/Dashboard/Blog";
 import BlogPost from "@/pages/Dashboard/Blog/[slug]";
 import NotificationsList from "@/pages/Dashboard/Notifications";
 import NotificationDetails from "@/pages/Dashboard/Notifications/[id]";
-
+import PublicLayout from "@/components/layout/PublicLayout";
 // Apply With Us
 import ApplyWithUsPlans from "@/pages/ApplyWithUs/Plans";
 import ApplyWithUsDashboard from "@/pages/ApplyWithUs/Dashboard";
@@ -59,6 +59,7 @@ import ProgramDetails from "@/pages/Dashboard/Programs/[id]";
 
 import HelpCenterLayout from "@/pages/HelpCenter";
 import HelpCenterFaqs from "@/pages/HelpCenter/Faqs";
+import HelpCenterFaqCategory from "@/pages/HelpCenter/Faqs/[id]";
 import HelpCenterVideos from "@/pages/HelpCenter/VideoTutorials";
 import HelpCenterTicket from "@/pages/HelpCenter/SupportTicket";
 
@@ -104,8 +105,36 @@ export default function App() {
             path="/auth"
             element={<Auth isDarkMode={isDarkMode} toggleTheme={toggleTheme} />}
           />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
+          <Route
+            element={
+              <PublicLayout isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+            }
+          >
+            <Route path="/schools" element={<FindSchools />} />
+            <Route path="/programs" element={<FindPrograms />} />
+            <Route path="/professors" element={<FindProfessors />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            {/* Help Center با زیرمسیرها */}
+            <Route path="help-center" element={<HelpCenterLayout />}>
+              <Route index element={<Navigate to="faqs" replace />} />
+              <Route path="faqs" element={<HelpCenterFaqs />} />
+              <Route
+                path="faqs/:categoryId"
+                element={<HelpCenterFaqCategory />}
+              />
+              <Route path="video-tutorials" element={<HelpCenterVideos />} />
+
+              <Route
+                path="support-ticket"
+                element={
+                  <PrivateRoute>
+                    <HelpCenterTicket />
+                  </PrivateRoute>
+                }
+              />
+            </Route>
+          </Route>
           <Route
             path="/profile"
             element={
@@ -114,54 +143,25 @@ export default function App() {
           />
           <Route path="favorites" element={<Favorites />} />
           <Route path="documents" element={<Documents />} />
-          <Route path="professors" element={<Professors />} />
+          <Route path="professor" element={<Professors />} />
           <Route path="applications" element={<Applications />} />
           <Route path="support" element={<Support />} />
           <Route path="rewards" element={<Rewards />} />
           <Route path="payments" element={<Payments />} />
           <Route path="helpcenter" element={<HelpCenter />} />
 
-          {/* Help Center با زیرمسیرها */}
-          <Route path="help-center" element={<HelpCenterLayout />}>
-            <Route index element={<Navigate to="faqs" replace />} />
-            <Route path="faqs" element={<HelpCenterFaqs />} />
-            <Route path="video-tutorials" element={<HelpCenterVideos />} />
-            <Route path="support-ticket" element={<HelpCenterTicket />} />
-          </Route>
-
           {/* Apply With Us */}
-          <Route
-            path="/apply-with-us/plans"
-            element={
-              <PrivateRoute>
-                <ApplyWithUsPlans />
-              </PrivateRoute>
-            }
-          />
+          <Route path="/apply-with-us/plans" element={<ApplyWithUsPlans />} />
           <Route
             path="/apply-with-us/dashboard"
-            element={
-              <PrivateRoute>
-                <ApplyWithUsDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/apply-with-us/profile"
-            element={
-              <PrivateRoute>
-                <Profile />
-              </PrivateRoute>
-            }
+            element={<ApplyWithUsDashboard />}
           />
 
           {/* داشبورد + روت‌های فرزند (محافظت‌شده) */}
           <Route
             path="/dashboard"
             element={
-              <PrivateRoute>
-                <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
-              </PrivateRoute>
+              <Dashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
             }
           >
             {/* تب پیش‌فرض داشبورد */}

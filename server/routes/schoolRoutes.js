@@ -3,7 +3,10 @@ import express from "express";
 import db from "../config/db.config.js";
 import { decodeHtmlEntities, convertNumber } from "../utils/helpers.js"; // Import the helper function
 import { countryMap, BASE_UPLOADS_URL } from "../config/constants.js";
-import { authenticateToken } from "../middleware/authMiddleware.js";
+import {
+  authenticateToken,
+  authenticateTokenOptional,
+} from "../middleware/authMiddleware.js";
 import { unserialize as phpUnserialize } from "php-serialize";
 import { buildUploadsUrl } from "../config/constants.js";
 import { unserialize } from "php-unserialize";
@@ -19,51 +22,55 @@ const countryNameToIdMap = Object.entries(countryMap).reduce(
 );
 
 // API endpoint school)2
-router.get("/schools", authenticateToken, async (req, res) => {
+router.get("/schools", authenticateTokenOptional, async (req, res) => {
   try {
     const t0 = Date.now();
-
+    const isGuest = String(req.query.guest || "") === "1" || !req.user;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { email } = req.user;
+    const email = req.user?.email || null;
 
     // ----- preload user + lookups -----
-    const [userDataRows, countriesData, categoriesData, statesData] =
-      await Promise.all([
-        db.query(
-          `
-          SELECT um.meta_key, um.meta_value
-          FROM qacom_wp_users u
-          LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
-          WHERE u.user_email = ?
-        `,
-          [email]
-        ),
-        db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy tt
-          JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-          WHERE tt.taxonomy = 'place' AND tt.parent = 0
-        `),
-        db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy tt
-          JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-          WHERE tt.taxonomy = 'program_category'
-          ORDER BY t.name ASC
-        `),
-        db.query(`
-          SELECT t.term_id, t.name
-          FROM qacom_wp_term_taxonomy tt
-          JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-          WHERE tt.taxonomy = 'place' AND tt.parent != 0
-        `),
-      ]);
+    let userMetas = [];
 
+    const [countriesData, categoriesData, statesData] = await Promise.all([
+      db.query(`
+    SELECT t.term_id, t.name
+    FROM qacom_wp_term_taxonomy tt
+    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+    WHERE tt.taxonomy = 'place' AND tt.parent = 0
+  `),
+      db.query(`
+    SELECT t.term_id, t.name
+    FROM qacom_wp_term_taxonomy tt
+    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+    WHERE tt.taxonomy = 'program_category'
+    ORDER BY t.name ASC
+  `),
+      db.query(`
+    SELECT t.term_id, t.name
+    FROM qacom_wp_term_taxonomy tt
+    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+    WHERE tt.taxonomy = 'place' AND tt.parent != 0
+  `),
+    ]);
+
+    if (!isGuest && email) {
+      const [userDataRows] = await db.query(
+        `
+    SELECT um.meta_key, um.meta_value
+    FROM qacom_wp_users u
+    LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
+    WHERE u.user_email = ?
+  `,
+        [email]
+      );
+      userMetas = userDataRows || [];
+    }
     const t1 = Date.now();
 
-    const userMetas = userDataRows[0] || [];
+    // const userMetas = userDataRows[0] || [];
     const availableCountries = countriesData[0] || [];
     const availableAreasOfStudy = categoriesData[0] || [];
     const availableStates = statesData[0] || [];
@@ -74,30 +81,52 @@ router.get("/schools", authenticateToken, async (req, res) => {
     }, {});
 
     // ----- build userPreferences (defaults from user meta) -----
-    const userMetaMap = userMetas.reduce((acc, meta) => {
+    // const userMetaMap = userMetas.reduce((acc, meta) => {
+    //   acc[meta.meta_key] = meta.meta_value;
+    //   return acc;
+    // }, {});
+    const userMetaMap = (userMetas || []).reduce((acc, meta) => {
       acc[meta.meta_key] = meta.meta_value;
       return acc;
     }, {});
 
-    const userPreferences = {
-      country: userMetaMap.application_country || null,
-      level: userMetaMap.application_level || null,
-      program: userMetaMap.application_program || null,
-      areaOfStudy: null,
-      englishTest: userMetaMap.application_english_test || null,
-      gpa: userMetaMap.application_gpa || null,
-      availableCountries: availableCountries.map((c) => ({
-        id: c.term_id,
-        name: decodeHtmlEntities(c.name),
-      })),
-      availableAreasOfStudy: availableAreasOfStudy.map((c) => ({
-        id: c.term_id,
-        name: decodeHtmlEntities(c.name),
-      })),
-      availablePrograms: [],
-    };
+    const userPreferences = isGuest
+      ? {
+          country: null,
+          level: null,
+          program: null,
+          areaOfStudy: null,
+          englishTest: null,
+          gpa: null,
+          availableCountries: (countriesData[0] || []).map((c) => ({
+            id: c.term_id,
+            name: decodeHtmlEntities(c.name),
+          })),
+          availableAreasOfStudy: (categoriesData[0] || []).map((c) => ({
+            id: c.term_id,
+            name: decodeHtmlEntities(c.name),
+          })),
+          availablePrograms: [],
+        }
+      : {
+          country: userMetaMap.application_country || null,
+          level: userMetaMap.application_level || null,
+          program: userMetaMap.application_program || null,
+          areaOfStudy: null,
+          englishTest: userMetaMap.application_english_test || null,
+          gpa: userMetaMap.application_gpa || null,
+          availableCountries: availableCountries.map((c) => ({
+            id: c.term_id,
+            name: decodeHtmlEntities(c.name),
+          })),
+          availableAreasOfStudy: availableAreasOfStudy.map((c) => ({
+            id: c.term_id,
+            name: decodeHtmlEntities(c.name),
+          })),
+          availablePrograms: [],
+        };
 
-    if (userPreferences.program) {
+    if (!isGuest && userPreferences.program) {
       const [programData] = await db.query(
         `
         SELECT p.id, p.name, p.category_id, t.name as category_name
@@ -197,7 +226,6 @@ router.get("/schools", authenticateToken, async (req, res) => {
       MAX(CASE WHEN sm.meta_key = 'women_number_admitted' THEN sm.meta_value END) AS women_admitted,
       MAX(CASE WHEN sm.meta_key = 'gr_6_years' THEN sm.meta_value END) AS gr_6_years,
 
-
       IFNULL(MAX(pr_tot.master_total), 0)   AS master_total,
       IFNULL(MAX(pr_tot.phd_total), 0)      AS phd_total,
       IFNULL(MAX(pr_tot.bachelor_total), 0) AS bachelor_total
@@ -240,7 +268,8 @@ router.get("/schools", authenticateToken, async (req, res) => {
 
     let whereClauses = ["s.status = 'publish'"];
     const params = [];
-    const ignoreDefaults = String(req.query.ignoreUserDefaults || "") === "1";
+    const ignoreDefaults =
+      isGuest || String(req.query.ignoreUserDefaults || "") === "1";
 
     const has = (v) =>
       typeof v !== "undefined" && v !== null && String(v) !== "";
@@ -667,8 +696,6 @@ router.get("/school/:id", authenticateToken, async (req, res) => {
         MAX(CASE WHEN sm.meta_key = 'gr_6_years' THEN sm.meta_value END) AS gr_6_years,
         MAX(CASE WHEN sm.meta_key = 'content' THEN sm.meta_value END) AS content
 
-
-
       FROM qacom_wp_apply_schools s
       LEFT JOIN qacom_wp_apply_schools_meta sm ON s.id = sm.school_id
       WHERE s.id = ?
@@ -1038,7 +1065,7 @@ router.post("/favorites/schools", authenticateToken, async (req, res) => {
     // Check if the school exists
     const [schoolData] = await db.query(
       `
-      SELECT id, name 
+      SELECT id, name
       FROM qacom_wp_apply_schools
       WHERE id = ?
     `,
@@ -1286,7 +1313,6 @@ router.get("/compare-schools/:ids", authenticateToken, async (req, res) => {
           MAX(CASE WHEN sm.meta_key = 'women_student'  THEN sm.meta_value END) AS women_student,
           MAX(CASE WHEN sm.meta_key = 'graduate_student'   THEN sm.meta_value END) AS graduate_student,
           MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
-          
 
           -- Costs (full breakdown)
           MAX(CASE WHEN sm.meta_key = 'cost_undergrade_in_state'  THEN sm.meta_value END) AS cost_undergrade_in_state,

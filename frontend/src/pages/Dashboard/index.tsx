@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Outlet } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import NavigationButtons from "@/components/layout/NavigationButtons"; // ← مسیر خودت
-
+import Navbar from "@/components/home/Navbar";
 type Props = { isDarkMode: boolean; toggleTheme: () => void };
+import { useAuth } from "@/context/AuthContext";
 
 export default function Dashboard({ isDarkMode, toggleTheme }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);

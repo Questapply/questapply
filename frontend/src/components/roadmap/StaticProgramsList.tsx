@@ -198,7 +198,7 @@ function StaticProgramList() {
           Find Programs
         </motion.h1>
         <motion.div
-          className="text-sm text-gray-500 dark:text-gray-400"
+          className="text-sm text-gray-600 dark:text-gray-400"
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5 }}
@@ -243,15 +243,15 @@ function StaticProgramList() {
               className={cn(
                 "flex items-center gap-2 px-4  rounded-full text-xs border !py-1.5 ",
 
-                "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+                "bg-sky-300 dark:bg-gray-800 border-gray-400 font-semibold dark:border-gray-700 text-gray-700 dark:text-gray-300",
                 "hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:border-purple-200 dark:hover:border-purple-700 hover:shadow-sm",
                 "transition-all duration-300 ease-in-out focus:outline-none",
 
                 button.label
-                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-gray-50 border-purple-200 dark:border-purple-700 "
+                  ? "bg-purple-400 dark:bg-purple-900/30 text-violet-700 dark:text-gray-50 border-gray-400 dark:border-purple-700 "
                   : "",
 
-                "opacity-50 cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-none"
+                "opacity-50 cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-700 hover:shadow-none"
               )}
             >
               <span>{button.icon}</span>
@@ -353,14 +353,14 @@ function StaticProgramList() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4">
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Program Features
                       </h4>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex items-center gap-2">
                           <motion.div
-                            className="w-8 h-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-400"
+                            className="w-8 h-8 bg-yellow-100/70 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-400"
                             whileHover={{ rotate: 20 }}
                           >
                             🏆
@@ -392,7 +392,7 @@ function StaticProgramList() {
                         </div>
                         <div className="flex items-center gap-2">
                           <motion.div
-                            className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400"
+                            className="w-8 h-8 bg-red-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400"
                             whileHover={{ rotate: 20 }}
                           >
                             🏫
@@ -406,7 +406,7 @@ function StaticProgramList() {
                         </div>
                         <div className="flex items-center gap-2">
                           <motion.div
-                            className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400"
+                            className="w-8 h-8 bg-blue-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400"
                             whileHover={{ rotate: 20 }}
                           >
                             🗣️
@@ -423,7 +423,7 @@ function StaticProgramList() {
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4">
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Application Deadline
                       </h4>
@@ -432,7 +432,7 @@ function StaticProgramList() {
                           {program.deadline.map((dl, index) => (
                             <motion.div
                               key={index}
-                              className="flex flex-col items-center gap-1 p-2 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg shadow-sm"
+                              className="flex flex-col items-center gap-1 p-2 bg-gradient-to-br from-purple-200 to-indigo-200 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg shadow-sm"
                               initial={{ scale: 0.9, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
                               transition={{ delay: 0.5 + index * 0.1 }}
@@ -483,7 +483,7 @@ function StaticProgramList() {
                         </div>
                       )}
                     </div>
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4">
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Requirements (Min)
                       </h4>
@@ -605,7 +605,7 @@ function StaticProgramList() {
                     >
                       <Button
                         variant="outline"
-                        className="text-purple-600 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                        className="text-purple-600 border-purple-300 bg-purple-100 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                       >
                         Program Information
                       </Button>
@@ -621,8 +621,8 @@ function StaticProgramList() {
                         variant="ghost"
                         className={`${
                           program.favorite === true
-                            ? "bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:shadow-red-500/30 "
-                            : "bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:shadow-green-500/30 "
+                            ? "bg-red-500 hover:bg-red-600 shadow-red-500/20 hover:shadow-red-500/30 "
+                            : "bg-green-500 hover:bg-green-600 shadow-green-500/20 hover:shadow-green-500/30 "
                         }shadow-md hover:shadow-lg transition-all`}
                       >
                         {program.favorite !== true

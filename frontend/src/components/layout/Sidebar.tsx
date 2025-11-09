@@ -35,10 +35,14 @@ const Sidebar = ({ isOpen, toggleSidebar }: SidebarProps) => {
     { icon: Home, label: "Dashboard", href: "/dashboard", active: true },
     { icon: User, label: "My Profile", href: "/profile" },
     { icon: Heart, label: "Favorite Lists", href: "/favorites" },
-    { icon: Users, label: "My Professors", href: "/professors" },
+    { icon: Users, label: "My Professors", href: "/professor" },
     { icon: BarChart2, label: "Track My Applications", href: "/applications" },
     { icon: FileText, label: "My Documents", href: "/documents" },
-    { icon: Headphones, label: "Support Ticket", href: "/support" },
+    {
+      icon: Headphones,
+      label: "Support Ticket",
+      href: "/help-center/support-ticket",
+    },
     { icon: Gift, label: "Quest Rewards", href: "/rewards" },
     { icon: CreditCard, label: "My Payments", href: "/payments" },
   ];

@@ -1,59 +1,83 @@
+// src/components/help/VideoTutorialsData.ts
 
 export interface TutorialVideo {
-  id: number;
+  /** همان مقدار vid در PHP: 331 | school | program | professors | resume | sop | lor | apply */
+  vid: string;
+  /** عنوان در لیست */
   title: string;
+  /** مثل 06:27 */
   duration: string;
+  /** لینک مستقیم mp4 همانند PHP */
+  src: string;
+  /** در صورت تمایل تصویر بندانگشتی */
   thumbnail?: string;
+  /** توضیح کوتاه */
   description?: string;
 }
 
 export const videoTutorialsData: TutorialVideo[] = [
-  { 
-    id: 1, 
-    title: "Profile Setup", 
+  {
+    vid: "331",
+    title: "Profile Setup",
     duration: "06:27",
-    description: "Learn how to set up your profile with all the necessary details to maximize your chances of university admission. This comprehensive guide covers personal information, academic background, test scores, and preferences."
+    src: "https://questapply.com/wp-content/uploads/2024/11/profile-setup.mp4",
+    description:
+      "Learn how to set up your profile with all the necessary details to maximize your chances of university admission.",
   },
-  { 
-    id: 2, 
-    title: "Find Schools", 
+  {
+    vid: "school",
+    title: "Find Schools",
     duration: "03:36",
-    description: "Discover how to use our advanced search features to find schools that match your preferences, academic profile, and career goals. Learn about filters, rankings, and how to compare institutions."
+    src: "https://questapply.com/wp-content/uploads/2024/11/find-schools-info.mp4",
+    description:
+      "Discover how to use advanced filters, rankings, and comparisons to find matching schools.",
   },
-  { 
-    id: 3, 
-    title: "Find Programs", 
+  {
+    vid: "program",
+    title: "Find Programs",
     duration: "03:51",
-    description: "Navigate through thousands of academic programs to find your perfect match. This tutorial shows how to filter by discipline, degree level, and specific requirements that align with your background."
+    src: "https://questapply.com/wp-content/uploads/2024/11/find-program-info.mp4",
+    description:
+      "Filter by discipline, level, deadlines, GPA/GRE/English thresholds to find the best-fit programs.",
   },
-  { 
-    id: 4, 
-    title: "Find Professors", 
+  {
+    vid: "professors",
+    title: "Find Professors",
     duration: "03:31",
-    description: "Learn how to research and connect with professors whose research interests align with yours. This tutorial covers how to find faculty members, review their work, and approach them appropriately."
+    src: "https://questapply.com/wp-content/uploads/2024/11/find-profesor-info.mp4",
+    description:
+      "Search faculty by research areas and university; learn how to shortlist and reach out.",
   },
-  { 
-    id: 5, 
-    title: "Create Resume", 
+  {
+    vid: "resume",
+    title: "Create Resume",
     duration: "03:19",
-    description: "Follow this step-by-step guide to creating a standout academic resume using our AI-powered tools. Learn how to highlight your strengths and tailor your resume for academic admissions."
+    src: "https://questapply.com/wp-content/uploads/2024/11/create-resume.mp4",
+    description:
+      "Build a strong academic resume with our AI-powered tools and export-ready templates.",
   },
-  { 
-    id: 6, 
-    title: "Create SOP", 
+  {
+    vid: "sop",
+    title: "Create SOP",
     duration: "06:23",
-    description: "Master the art of writing an effective Statement of Purpose with our guided process. Learn how to structure your story, emphasize your motivation, and connect your background to your future goals."
+    src: "https://questapply.com/wp-content/uploads/2024/12/sop-info.mp4",
+    description:
+      "Write a compelling SOP: structure, tone, and tailoring for each school/program.",
   },
-  { 
-    id: 7, 
-    title: "Create LOR", 
+  {
+    vid: "lor",
+    title: "Create LOR",
     duration: "05:07",
-    description: "Get detailed instructions on how to request and manage Letters of Recommendation through our platform. Learn best practices for selecting recommenders and providing them with the information they need."
+    src: "https://questapply.com/wp-content/uploads/2024/12/LOR5.mp4",
+    description:
+      "Request/manage recommenders, and understand best practices for strong letters.",
   },
-  { 
-    id: 8, 
-    title: "Apply Now", 
+  {
+    vid: "apply",
+    title: "Apply Now",
     duration: "02:58",
-    description: "Walk through the complete application submission process, from document uploads to fee payments. This tutorial ensures you don't miss any critical steps in finalizing your university applications."
-  }
+    src: "https://questapply.com/wp-content/uploads/2024/11/apply-now-info.mp4",
+    description:
+      "Walk through submission, fees, statuses, and ensure nothing is missed.",
+  },
 ];

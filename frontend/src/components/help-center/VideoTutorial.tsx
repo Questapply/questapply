@@ -1,14 +1,15 @@
+// src/components/help/VideoTutorial.tsx
 import React, { useState } from "react";
 import { Play, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { TutorialVideo } from "./VideoTutorialsData";
+import { Dialog, DialogContent } from "../ui/dialog";
+import type { TutorialVideo } from "./VideoTutorialsData";
 
 interface VideoTutorialProps {
   video: TutorialVideo;
   isSelected: boolean;
-  onClick: () => void;
+  onClick: () => void; // انتخاب در والد (برای هایلایت/اسکرول/تغییر URL)
 }
 
 export const VideoTutorial = ({
@@ -27,9 +28,11 @@ export const VideoTutorial = ({
         whileHover={{ scale: 1.03 }}
         transition={{ duration: 0.2 }}
       >
+        {/* Thumbnail/Gradient card */}
         <div
           className="bg-gradient-to-br from-purple-900 to-indigo-900 dark:from-purple-950 dark:to-indigo-950 aspect-video relative cursor-pointer"
           onClick={onClick}
+          aria-label={`Open ${video.title}`}
         >
           <div className="absolute inset-0 flex items-center justify-center">
             <motion.div
@@ -48,6 +51,7 @@ export const VideoTutorial = ({
           </div>
         </div>
 
+        {/* Meta + actions */}
         <div className="p-4 bg-white dark:bg-gray-800">
           <div className="flex justify-between items-center">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">
@@ -58,20 +62,38 @@ export const VideoTutorial = ({
             </span>
           </div>
 
-          <div className="mt-3">
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+            {video.description ||
+              `Learn how to use the ${video.title} feature in QuestApply.`}
+          </p>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {/* پخش داخل دیالوگ */}
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              className="w-full text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white"
               onClick={() => setShowDialog(true)}
             >
-              <Play className="h-4 w-4 mr-1" />
+              <Play className="h-4 w-4 mr-2" />
               Watch Now
             </Button>
+
+            {/* لینک به روت با ?vid= مثل PHP */}
+            <a
+              href={`?vid=${encodeURIComponent(video.vid)}`}
+              className="inline-flex items-center justify-center rounded-md border text-sm px-3 py-2
+                         border-purple-200 dark:border-purple-900/50 text-purple-700 dark:text-purple-300
+                         hover:bg-purple-50 dark:hover:bg-purple-900/20"
+              onClick={onClick}
+            >
+              Open Page
+            </a>
           </div>
         </div>
       </motion.div>
 
+      {/* Dialog with real <video> player */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black">
           <div className="flex justify-end p-2">
@@ -80,36 +102,22 @@ export const VideoTutorial = ({
               size="icon"
               className="text-white hover:bg-white/10"
               onClick={() => setShowDialog(false)}
+              aria-label="Close"
             >
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <div className="aspect-video w-full flex items-center justify-center bg-gradient-to-br from-purple-900/80 to-indigo-900/80">
-            <div className="text-center p-8">
-              <h3 className="text-2xl font-bold text-white mb-4">
-                {video.title}
-              </h3>
-              <p className="text-white/80 mb-8">
-                {video.description ||
-                  `Learn how to use the ${video.title} feature in QuestApply`}
-              </p>
-              <div className="flex justify-center items-center gap-4">
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  <Play className="h-4 w-4 mr-2" />
-                  Play Tutorial
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                >
-                  Download Tutorial
-                </Button>
-              </div>
-              <p className="text-white/60 text-sm mt-8">
-                This is a placeholder. In a production environment, this would
-                be a real video player.
-              </p>
-            </div>
+
+          <div className="aspect-video w-full">
+            <video
+              key={video.vid}
+              controls
+              playsInline
+              className="w-full h-full"
+              preload="metadata"
+            >
+              <source src={video.src} type="video/mp4" />
+            </video>
           </div>
         </DialogContent>
       </Dialog>

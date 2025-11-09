@@ -155,6 +155,7 @@ const DashboardLayout = ({
 
         {/* Main Content Container */}
         <div className="px-4 mt-20 py-6 flex-1">
+          <h1>hello</h1>
           <div className="w-full">{children}</div>
         </div>
       </div>

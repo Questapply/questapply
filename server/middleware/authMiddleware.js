@@ -34,3 +34,18 @@ export const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// NEW: optional
+export const authenticateTokenOptional = (req, res, next) => {
+  const authHeader = req.headers["authorization"] || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    // اگر توکن مشکل داشت، کاربر را مهمان فرض کن اما مسیر را نبند
+    req.user = err ? null : user;
+    next();
+  });
+};

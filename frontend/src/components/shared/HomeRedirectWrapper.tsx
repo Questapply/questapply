@@ -4,6 +4,7 @@ import LoadingSkeleton from "../loading-skeleton/LoadingSkeleton"; // Assuming t
 import PublicNavbar from "../home/PublicNavbar"; // Import PublicNavbar
 import AuthenticatedNavbar from "../home/AuthenticatedNavbar"; // Import AuthenticatedNavbar
 import Index from "@/pages/Home/Index"; // Import the Index page
+import Navbar from "../home/Navbar";
 
 interface HomeRedirectWrapperProps {
   isDarkMode: boolean;
@@ -25,7 +26,7 @@ const HomeRedirectWrapper: React.FC<HomeRedirectWrapperProps> = ({
 
   return (
     <>
-      {isAuthenticated ? (
+      {/* {isAuthenticated ? (
         <AuthenticatedNavbar
           isDarkMode={isDarkMode}
           onToggleTheme={onToggleTheme}
@@ -37,7 +38,8 @@ const HomeRedirectWrapper: React.FC<HomeRedirectWrapperProps> = ({
           onToggleTheme={onToggleTheme}
           //   setIsGameOpen={setIsGameOpen}
         />
-      )}
+      )} */}
+      <Navbar isDarkMode={isDarkMode} onToggleTheme={onToggleTheme} />
       <Index
         isDarkMode={isDarkMode}
         // onToggleTheme={onToggleTheme}

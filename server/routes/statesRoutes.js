@@ -1,11 +1,11 @@
 import db from "../config/db.config.js";
-import { authenticateToken } from "../middleware/authMiddleware.js";
+import { authenticateTokenOptional } from "../middleware/authMiddleware.js";
 import express from "express";
 
 const router = express.Router();
 
 // API endpoint to fetch states for a country
-router.get("/states", authenticateToken, async (req, res) => {
+router.get("/states", authenticateTokenOptional, async (req, res) => {
   try {
     const { country } = req.query;
 

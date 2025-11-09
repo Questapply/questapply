@@ -30,11 +30,11 @@ const ApplicationFilters: React.FC<Props> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full mb-4">
+    <form onSubmit={handleSubmit} className="w-full mb-4 ">
       <div
         className="
-          flex flex-col md:flex-row md:items-end gap-3 md:gap-4
-          bg-gray-50 dark:bg-gray-900/50 p-3 sm:p-4 rounded-lg
+          flex flex-col md:flex-row md:items-end gap-3 md:gap-4 border
+          bg-slate-100 border-slate-200 dark:border-slate-700 dark:bg-gray-900/50 p-3 sm:p-4 rounded-lg
         "
       >
         {/* Order by */}
