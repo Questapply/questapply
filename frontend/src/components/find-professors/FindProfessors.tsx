@@ -190,6 +190,7 @@ const FindProfessors = () => {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const isGuest = !token;
+  const [guestFilterUsed, setGuestFilterUsed] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [showGate, setShowGate] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1117,9 +1118,16 @@ const FindProfessors = () => {
   }, [selectedFilters.country, selectedFilters.areaOfStudy]);
 
   const applyFilters = useCallback(() => {
+    if (isGuest && guestFilterUsed) {
+      setShowGate(true);
+      return;
+    }
     setCurrentPage(1);
     fetchProfessors(1, selectedFilters, { append: false });
-  }, [fetchProfessors, selectedFilters]);
+    if (isGuest && !guestFilterUsed) {
+      setGuestFilterUsed(true);
+    }
+  }, [isGuest, guestFilterUsed, fetchProfessors, selectedFilters]);
 
   const processResearchAreas = (researchArea: string): string[] => {
     if (!researchArea) return [];
@@ -1526,9 +1534,9 @@ const FindProfessors = () => {
               <Button
                 type="button"
                 onClick={applyFilters}
-                disabled={!isApplyEnabled || loading}
+                disabled={loading || (!isGuest && !isApplyEnabled)}
                 className={`ml-2 w-full ${
-                  isApplyEnabled && !loading
+                  !loading
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}

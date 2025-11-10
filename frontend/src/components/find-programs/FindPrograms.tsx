@@ -489,7 +489,7 @@ const FindPrograms = () => {
       return;
     }
 
-    const res = await fetch(`${API_URL}/favorites`, {
+    const res = await fetch(`${API_URL}/program-data/favorites`, {
       method: "GET",
       headers: buildHeaders(true),
     });
