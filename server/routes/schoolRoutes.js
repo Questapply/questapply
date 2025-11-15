@@ -21,56 +21,77 @@ const countryNameToIdMap = Object.entries(countryMap).reduce(
   {}
 );
 
-// API endpoint school)2
+// GET /api/schools
 router.get("/schools", authenticateTokenOptional, async (req, res) => {
   try {
     const t0 = Date.now();
+
     const isGuest = String(req.query.guest || "") === "1" || !req.user;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const email = req.user?.email || null;
 
-    // ----- preload user + lookups -----
+    const email = req.user?.email || null;
+    let userId = null;
     let userMetas = [];
 
+    // ---------- preload lookups ----------
     const [countriesData, categoriesData, statesData] = await Promise.all([
       db.query(`
-    SELECT t.term_id, t.name
-    FROM qacom_wp_term_taxonomy tt
-    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-    WHERE tt.taxonomy = 'place' AND tt.parent = 0
-  `),
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+        WHERE tt.taxonomy = 'place' AND tt.parent = 0
+      `),
       db.query(`
-    SELECT t.term_id, t.name
-    FROM qacom_wp_term_taxonomy tt
-    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-    WHERE tt.taxonomy = 'program_category'
-    ORDER BY t.name ASC
-  `),
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+        WHERE tt.taxonomy = 'program_category'
+        ORDER BY t.name ASC
+      `),
       db.query(`
-    SELECT t.term_id, t.name
-    FROM qacom_wp_term_taxonomy tt
-    JOIN qacom_wp_terms t ON tt.term_id = t.term_id
-    WHERE tt.taxonomy = 'place' AND tt.parent != 0
-  `),
+        SELECT t.term_id, t.name
+        FROM qacom_wp_term_taxonomy tt
+        JOIN qacom_wp_terms t ON tt.term_id = t.term_id
+        WHERE tt.taxonomy = 'place' AND tt.parent != 0
+      `),
     ]);
 
+    // ---------- load user metas (برای کاربر لاگین شده) ----------
     if (!isGuest && email) {
-      const [userDataRows] = await db.query(
-        `
-    SELECT um.meta_key, um.meta_value
-    FROM qacom_wp_users u
-    LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
-    WHERE u.user_email = ?
-  `,
+      // 1) پیدا کردن user_id بر اساس ایمیل (مثل userRoutes)
+      const [users] = await db.query(
+        `SELECT ID FROM qacom_wp_users WHERE user_email = ? LIMIT 1`,
         [email]
       );
-      userMetas = userDataRows || [];
+      if (users && users.length > 0) {
+        userId = users[0].ID;
+      }
+
+      // 2) اگر userId داریم، متای مربوط به اپلیکیشن را بخوانیم
+      if (userId) {
+        const [metaRows] = await db.query(
+          `
+          SELECT meta_key, meta_value
+          FROM qacom_wp_usermeta
+          WHERE user_id = ?
+            AND meta_key IN (
+              'application_country',
+              'application_level',
+              'application_program',
+              'application_english_test',
+              'application_gpa'
+            )
+        `,
+          [userId]
+        );
+        userMetas = metaRows || [];
+      }
     }
+
     const t1 = Date.now();
 
-    // const userMetas = userDataRows[0] || [];
     const availableCountries = countriesData[0] || [];
     const availableAreasOfStudy = categoriesData[0] || [];
     const availableStates = statesData[0] || [];
@@ -80,11 +101,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       return acc;
     }, {});
 
-    // ----- build userPreferences (defaults from user meta) -----
-    // const userMetaMap = userMetas.reduce((acc, meta) => {
-    //   acc[meta.meta_key] = meta.meta_value;
-    //   return acc;
-    // }, {});
+    // ---------- userPreferences از روی userMeta ----------
     const userMetaMap = (userMetas || []).reduce((acc, meta) => {
       acc[meta.meta_key] = meta.meta_value;
       return acc;
@@ -112,7 +129,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
           country: userMetaMap.application_country || null,
           level: userMetaMap.application_level || null,
           program: userMetaMap.application_program || null,
-          areaOfStudy: null,
+          areaOfStudy: null, // بعداً از برنامه پر می‌شود
           englishTest: userMetaMap.application_english_test || null,
           gpa: userMetaMap.application_gpa || null,
           availableCountries: availableCountries.map((c) => ({
@@ -126,6 +143,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
           availablePrograms: [],
         };
 
+    // اگر برنامه‌ای ست شده، جزئیات برنامه و areaOfStudy را لود کن
     if (!isGuest && userPreferences.program) {
       const [programData] = await db.query(
         `
@@ -165,8 +183,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       }
     }
 
-    // ----- SELECT / FROM / WHERE skeleton -----
-    // فیکس 1: هزینه‌ها را همان‌جا تمیز و عددی کن تا 0 نشوند
+    // ---------- SELECT / FROM ----------
     let selectClause = `
       s.id, s.name, s.country, s.state,
       CASE
@@ -184,39 +201,41 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       MAX(CASE WHEN sm.meta_key = 'shanghai_rank' THEN sm.meta_value END) AS shanghai_rank,
       MAX(CASE WHEN sm.meta_key = 'the_rank' THEN sm.meta_value END) AS the_rank,
 
-      /* cost_* را به عدد تبدیل می‌کنیم: حذف ویرگول/$ و CAST */
       CAST(
-     MAX(
-    CASE WHEN sm.meta_key = 'cost_graduate_in_state' THEN
-      NULLIF(
-        REPLACE(
-          /* اگر الگو مثل 1.234 یا 12.345.678 بود → نقطه‌ها هزارگان‌اند: همهٔ '.' حذف شود */
-          CASE
-            WHEN TRIM(sm.meta_value) REGEXP '^[0-9]{1,3}(\\.[0-9]{3})+$'
-              THEN REPLACE(TRIM(sm.meta_value), '.', '')
-            ELSE TRIM(sm.meta_value)  -- یک نقطه (اعشار) را نگه می‌داریم
+        MAX(
+          CASE WHEN sm.meta_key = 'cost_graduate_in_state' THEN
+            NULLIF(
+              REPLACE(
+                CASE
+                  WHEN TRIM(sm.meta_value) REGEXP '^[0-9]{1,3}(\\.[0-9]{3})+$'
+                    THEN REPLACE(TRIM(sm.meta_value), '.', '')
+                  ELSE TRIM(sm.meta_value)
+                END,
+                '$', ''
+              ),
+              ''
+            )
           END
-        , '$', '')  -- حذف $
-      , '')
-    END
-  ) AS DECIMAL(18,2)
-) AS cost_in_state,
+        ) AS DECIMAL(18,2)
+      ) AS cost_in_state,
 
       CAST(
-      MAX(
-    CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN
-      NULLIF(
-        REPLACE(
-          CASE
-            WHEN TRIM(sm.meta_value) REGEXP '^[0-9]{1,3}(\\.[0-9]{3})+$'
-              THEN REPLACE(TRIM(sm.meta_value), '.', '')
-            ELSE TRIM(sm.meta_value)
+        MAX(
+          CASE WHEN sm.meta_key = 'cost_undergrade_out_of_state' THEN
+            NULLIF(
+              REPLACE(
+                CASE
+                  WHEN TRIM(sm.meta_value) REGEXP '^[0-9]{1,3}(\\.[0-9]{3})+$'
+                    THEN REPLACE(TRIM(sm.meta_value), '.', '')
+                  ELSE TRIM(sm.meta_value)
+                END,
+                '$', ''
+              ),
+              ''
+            )
           END
-        , '$', '')
-      , '')
-    END
-  ) AS DECIMAL(18,2)
-) AS cost_out_state,
+        ) AS DECIMAL(18,2)
+      ) AS cost_out_state,
 
       MAX(CASE WHEN sm.meta_key = 'graduate_student' THEN sm.meta_value END) AS graduate_student,
       MAX(CASE WHEN sm.meta_key = 'undergrade_student' THEN sm.meta_value END) AS undergrade_student,
@@ -242,26 +261,23 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
          'men_number_applied','women_number_applied',
          'men_number_admitted','women_number_admitted',
          'men_number_admitted','women_number_admitted',
-'gr_6_years'
+         'gr_6_years'
        )
     `;
 
-    // شمارش سطح‌ها
     fromClause += `
       LEFT JOIN (
-  SELECT
-    school_id,
-    -- شمارش ردیف‌ها مثل /school/:id (بدون DISTINCT و بدون normalize)
-    SUM(CASE WHEN level = 'Master'   THEN 1 ELSE 0 END)   AS master_total,
-    SUM(CASE WHEN level = 'Ph.D.'    THEN 1 ELSE 0 END)   AS phd_total,
-    SUM(CASE WHEN level = 'Bachelor' THEN 1 ELSE 0 END)   AS bachelor_total
-  FROM qacom_wp_apply_programs_relationship
-  WHERE status = 'publish'
-  GROUP BY school_id
-) pr_tot ON pr_tot.school_id = s.id
+        SELECT
+          school_id,
+          SUM(CASE WHEN level = 'Master'   THEN 1 ELSE 0 END) AS master_total,
+          SUM(CASE WHEN level = 'Ph.D.'    THEN 1 ELSE 0 END) AS phd_total,
+          SUM(CASE WHEN level = 'Bachelor' THEN 1 ELSE 0 END) AS bachelor_total
+        FROM qacom_wp_apply_programs_relationship
+        WHERE status = 'publish'
+        GROUP BY school_id
+      ) pr_tot ON pr_tot.school_id = s.id
     `;
 
-    // COUNT سبک
     let fromClauseCount = `
       FROM qacom_wp_apply_schools s
     `;
@@ -273,17 +289,20 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
 
     const has = (v) =>
       typeof v !== "undefined" && v !== null && String(v) !== "";
-    // ----- read filters -----
+
+    // ---------- فیلترها ----------
     const filterCountry = has(req.query.country)
       ? req.query.country
       : ignoreDefaults
       ? null
       : userPreferences.country;
+
     const filterDegreeLevel = has(req.query.degreeLevel)
       ? req.query.degreeLevel
       : ignoreDefaults
       ? null
       : userPreferences.level;
+
     const filterSearch = (req.query.search || "").trim() || null;
     const filterOrderBy = (req.query.orderBy || "").trim() || null;
 
@@ -303,8 +322,8 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
         (userPreferences.areaOfStudy && String(userPreferences.areaOfStudy.id))
     );
     const programIds = parseCsv(req.query.program || userPreferences.program);
-
     const schoolIds = parseCsv(req.query.school);
+
     if (schoolIds.length === 1) {
       whereClauses.push("s.id = ?");
       params.push(parseInt(schoolIds[0], 10));
@@ -334,7 +353,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       }
     }
 
-    // Area/Program
+    // Area / Program
     if (areaIds.length) {
       fromClause += `
         LEFT JOIN qacom_wp_apply_programs_relationship pr
@@ -406,7 +425,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       : "";
     const groupByClause = ` GROUP BY s.id, s.name, s.country, s.state, s.image`;
 
-    // Order by (عبارت کامل تا خطای MySQL نده)
+    // ---------- Order By ----------
     const orderByMap = {
       qs_rank: `
         CASE
@@ -464,7 +483,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
         ? `${orderByMap[filterOrderBy]}, s.name ASC`
         : `${orderByMap.qs_rank}, s.name ASC`;
 
-    // ----- queries -----
+    // ---------- Queries ----------
     const finalQuery = `
       SELECT ${selectClause}
       ${fromClause}
@@ -473,6 +492,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       ORDER BY ${selectedOrderBy}
       LIMIT ? OFFSET ?
     `;
+
     const countQuery = `
       SELECT COUNT(DISTINCT s.id) AS total
       ${fromClauseCount}
@@ -493,10 +513,10 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
     const schools = schoolRows.map((row) => {
       const gr6 = convertNumber(row.gr_6_years);
       let graduationRate;
+
       if (!isNaN(gr6) && gr6 > 0) {
         graduationRate = Math.round(gr6);
       } else {
-        // fallback اختیاری: نسبت grad to total (اگر خواستی می‌توانی 0 بگذاری)
         const graduateStudent = convertNumber(row.graduate_student);
         const undergradeStudent = convertNumber(row.undergrade_student);
         const totalStudents = graduateStudent + undergradeStudent;
@@ -557,7 +577,7 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
 
     const hasMore = page * limit < totalCount;
 
-    // فیکس 2: اگر کاربر کشور را با فیلتر عوض کرده، همان را در خروجی برگردان
+    // اگر کاربر در query، country را override کرده، همان را در userPreferencesOut برگردان
     const userPreferencesOut = { ...userPreferences };
     if (req.query.country) {
       userPreferencesOut.country = String(req.query.country);
@@ -573,6 +593,16 @@ router.get("/schools", authenticateTokenOptional, async (req, res) => {
       "total(ms):",
       Date.now() - t0
     );
+    console.log("[/schools] user =", req.user);
+    console.log(
+      "[/schools] userId =",
+      userId,
+      "email =",
+      email,
+      "userMetas count =",
+      userMetas.length
+    );
+    console.log("[/schools] final userPreferences =", userPreferencesOut);
 
     res.json({
       schools,

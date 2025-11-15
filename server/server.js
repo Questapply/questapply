@@ -32,7 +32,6 @@ import ticketRoutes from "./routes/ticketRoutes.js";
 dotenv.config();
 
 const app = express();
-console.log("[BOOT] mailer-fix v3");
 
 const DEFAULT_ORIGINS = [
   "http://localhost:5173",

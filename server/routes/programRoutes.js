@@ -738,7 +738,6 @@ router.get(
 );
 
 // GET /api/program-data/find
-
 router.get("/find", authenticateTokenOptional, async (req, res) => {
   try {
     // ---------------- Common paging ----------------
@@ -763,24 +762,22 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
       ignoreFlag === "true";
 
     // ---------------- QUICK PATH for Guests ----------------
-    // نسخه‌ی سبک و سریع، مخصوص وقتی که کاربر توکن ندارد و ?guest=1 است.
     if (guestMode) {
       try {
-        // فیلترهای ساده و سبک برای مهمان (بدون preload پروفایل و بدون JOINهای سنگین):
         const filters = {
-          country: req.query.country || null, // s.country
-          level: req.query.degreeLevel || null, // pr.level (PhD → Ph.D.)
-          areaOfStudy: req.query.areaOfStudy || null, // p.category_id (CSV پشتیبانی)
-          program: req.query.program || null, // pr.program_id (CSV)
-          state: req.query.state || null, // s.state (name یا id را اینجا فقط name فرض می‌کنیم)
-          englishTest: req.query.english || null, // MIN_* روی pr
-          englishScore: req.query.englishScore || null, // threshold روی MIN_*
-          gpa: req.query.gpa || null, // pr.MIN_GPA <= gpa
-          school: req.query.school || null, // pr.school_id
-          gre: req.query.gre || null, // pr.GRE_requirement
-          deadline: (req.query.deadline || "").toString().toLowerCase(), // fall/spring/...
+          country: req.query.country || null,
+          level: req.query.degreeLevel || null,
+          areaOfStudy: req.query.areaOfStudy || null,
+          program: req.query.program || null,
+          state: req.query.state || null,
+          englishTest: req.query.english || null,
+          englishScore: req.query.englishScore || null,
+          gpa: req.query.gpa || null,
+          school: req.query.school || null,
+          gre: req.query.gre || null,
+          deadline: (req.query.deadline || "").toString().toLowerCase(),
           deadlineMonths: req.query.select_month || req.query.deadline_months,
-          orderBy: req.query.orderBy || null, // ساده‌سازی: فعلاً pr.id DESC
+          orderBy: req.query.orderBy || null,
         };
 
         const englishTestMetaKeys = {
@@ -800,7 +797,6 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
         };
         const deadlineCol = seasonColMapLight[filters.deadline] || null;
 
-        // WHEREهای سبک
         let where = [`pr.status = 'publish'`];
         let params = [];
 
@@ -875,7 +871,6 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
         }
 
         if (filters.state) {
-          // سبک: فرض name (اگر ID فرستادید، بهتر است در فرانت name پاس بدهید برای guest)
           where.push("s.state = ?");
           params.push(String(filters.state));
         }
@@ -884,7 +879,6 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
           where.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) IS NOT NULL`);
           where.push(`CAST(pr.\`${deadlineCol}\` AS CHAR) != '0000-00-00'`);
 
-          // فیلتر ماه اختیاری
           const monthNums = parseMonthsFlexible(filters.deadlineMonths);
           if (monthNums.length) {
             where.push(
@@ -896,7 +890,6 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
           }
         }
 
-        // Base query سبک (بدون JOINهای متعدد meta)
         let q = `
           SELECT
             pr.id            AS rel_id,
@@ -924,13 +917,11 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
           WHERE ${where.join(" AND ")}
         `;
 
-        // Order ساده (بدون join اضافه)
         q += ` ORDER BY pr.id DESC LIMIT ? OFFSET ?`;
         params.push(limit, offset);
 
         const [rows] = await db.query(q, params);
 
-        // Count سبک
         const [cntRows] = await db.query(
           `
           SELECT COUNT(*) AS cnt
@@ -939,12 +930,11 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
           JOIN qacom_wp_apply_programs p ON p.id = pr.program_id
           WHERE ${where.join(" AND ")}
         `,
-          where.length ? params.slice(0, params.length - 2) : [] // بدون limit/offset
+          where.length ? params.slice(0, params.length - 2) : []
         );
         const total = cntRows?.[0]?.cnt || 0;
         const hasMore = page * limit < total;
 
-        // Map سبک
         const programs = (rows || []).map((r) => {
           const deadlines = [];
           const f = formatDeadlineDate(r.deadline_fall);
@@ -1034,7 +1024,7 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
         return res.json({
           programs,
           count: total,
-          userPreferences: {}, // مهمان: بدون پروفایل
+          userPreferences: {},
           hasMore,
           auth: {
             isGuest: true,
@@ -1054,52 +1044,31 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
     }
 
     // ---------------- FULL PATH (original logic) for Logged-in / Non-guest ----------------
-    // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-    // -------- Preload user + lookups (+ states for mapping id->name) --------
-    const [
-      userDataResult,
-      countriesDataResult,
-      categoriesDataResult,
-      statesDataResult,
-    ] = await Promise.all([
-      !isGuest && !ignoreUserDefaults
-        ? db.query(
-            `
-            SELECT u.ID, um.meta_key, um.meta_value
-            FROM qacom_wp_users u
-            LEFT JOIN qacom_wp_usermeta um ON u.ID = um.user_id
-            WHERE u.user_email = ?
-          `,
-            [email]
-          )
-        : Promise.resolve([[]]),
 
-      db.query(`
-        SELECT t.term_id, t.name
-        FROM qacom_wp_term_taxonomy tt
-        JOIN qacom_wp_terms t ON t.term_id = tt.term_id
-        WHERE tt.taxonomy = 'place' AND tt.parent = 0
-      `),
+    // 1) Lookups (country/category/state) – مثل قبل
+    const [countriesDataResult, categoriesDataResult, statesDataResult] =
+      await Promise.all([
+        db.query(`
+          SELECT t.term_id, t.name
+          FROM qacom_wp_term_taxonomy tt
+          JOIN qacom_wp_terms t ON t.term_id = tt.term_id
+          WHERE tt.taxonomy = 'place' AND tt.parent = 0
+        `),
+        db.query(`
+          SELECT t.term_id, t.name
+          FROM qacom_wp_term_taxonomy pr
+          JOIN qacom_wp_terms t ON t.term_id = pr.term_id
+          WHERE pr.taxonomy = 'program_category'
+          ORDER BY t.name ASC
+        `),
+        db.query(`
+          SELECT t.term_id, t.name
+          FROM qacom_wp_term_taxonomy tt
+          JOIN qacom_wp_terms t ON t.term_id = tt.term_id
+          WHERE tt.taxonomy = 'place' AND tt.parent != 0
+        `),
+      ]);
 
-      db.query(`
-        SELECT t.term_id, t.name
-        FROM qacom_wp_term_taxonomy pr
-        JOIN qacom_wp_terms t ON t.term_id = pr.term_id
-        WHERE pr.taxonomy = 'program_category'
-        ORDER BY t.name ASC
-      `),
-
-      db.query(`
-        SELECT t.term_id, t.name
-        FROM qacom_wp_term_taxonomy tt
-        JOIN qacom_wp_terms t ON t.term_id = tt.term_id
-        WHERE tt.taxonomy = 'place' AND tt.parent != 0
-      `),
-    ]);
-
-    const userData = Array.isArray(userDataResult?.[0])
-      ? userDataResult[0]
-      : [];
     const countriesData = countriesDataResult?.[0] || [];
     const categoriesData = categoriesDataResult?.[0] || [];
     const statesData = statesDataResult?.[0] || [];
@@ -1109,7 +1078,49 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
       return acc;
     }, {});
 
-    // -------- Build userPreferences --------
+    // 2) userId + userMetas بر اساس email (مثل schools route جدید)
+    let userId = null;
+    let userMetas = [];
+
+    if (!isGuest && !ignoreUserDefaults && email) {
+      const [users] = await db.query(
+        `SELECT ID FROM qacom_wp_users WHERE user_email = ? LIMIT 1`,
+        [email]
+      );
+      if (users && users.length > 0) {
+        userId = users[0].ID;
+
+        const META_KEYS = [
+          "application_country",
+          "application_level",
+          "application_program",
+          "application_english_test",
+          "application_english_score",
+          "application_gpa",
+          "gre_test",
+          "application_gre_total",
+          "application_gre_verbal",
+          "application_gre_quantitative",
+          "application_gre_writing",
+          "lsat_test",
+          "application_sat_total",
+          "application_act_total",
+        ];
+
+        const [metaRows] = await db.query(
+          `
+          SELECT meta_key, meta_value
+          FROM qacom_wp_usermeta
+          WHERE user_id = ?
+            AND meta_key IN (${META_KEYS.map(() => "?").join(",")})
+        `,
+          [userId, ...META_KEYS]
+        );
+        userMetas = metaRows || [];
+      }
+    }
+
+    // 3) userPreferences از روی userMetas
     let userPreferences = {
       country: null,
       level: null,
@@ -1128,36 +1139,36 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
       actTotal: null,
     };
 
-    if (!isGuest && !ignoreUserDefaults) {
-      userData.forEach((meta) => {
-        if (meta.meta_key === "application_country")
-          userPreferences.country = meta.meta_value;
-        else if (meta.meta_key === "application_level")
-          userPreferences.level = meta.meta_value;
-        else if (meta.meta_key === "application_program")
-          userPreferences.program = meta.meta_value;
-        else if (meta.meta_key === "application_english_test")
-          userPreferences.englishTest = meta.meta_value;
-        else if (meta.meta_key === "application_english_score")
-          userPreferences.englishScore = meta.meta_value;
-        else if (meta.meta_key === "application_gpa")
-          userPreferences.gpa = meta.meta_value;
-        else if (meta.meta_key === "gre_test")
-          userPreferences.greTest = meta.meta_value;
-        else if (meta.meta_key === "application_gre_total")
-          userPreferences.greTotal = meta.meta_value;
-        else if (meta.meta_key === "application_gre_verbal")
-          userPreferences.greVerbal = meta.meta_value;
-        else if (meta.meta_key === "application_gre_quantitative")
-          userPreferences.greQuantitative = meta.meta_value;
-        else if (meta.meta_key === "application_gre_writing")
-          userPreferences.greWriting = meta.meta_value;
-        else if (meta.meta_key === "lsat_test")
-          userPreferences.lsatTest = meta.meta_value;
-        else if (meta.meta_key === "application_sat_total")
-          userPreferences.satTotal = meta.meta_value;
-        else if (meta.meta_key === "application_act_total")
-          userPreferences.actTotal = meta.meta_value;
+    if (!isGuest && !ignoreUserDefaults && userMetas.length) {
+      userMetas.forEach((m) => {
+        if (m.meta_key === "application_country")
+          userPreferences.country = m.meta_value;
+        else if (m.meta_key === "application_level")
+          userPreferences.level = m.meta_value;
+        else if (m.meta_key === "application_program")
+          userPreferences.program = m.meta_value;
+        else if (m.meta_key === "application_english_test")
+          userPreferences.englishTest = m.meta_value;
+        else if (m.meta_key === "application_english_score")
+          userPreferences.englishScore = m.meta_value;
+        else if (m.meta_key === "application_gpa")
+          userPreferences.gpa = m.meta_value;
+        else if (m.meta_key === "gre_test")
+          userPreferences.greTest = m.meta_value;
+        else if (m.meta_key === "application_gre_total")
+          userPreferences.greTotal = m.meta_value;
+        else if (m.meta_key === "application_gre_verbal")
+          userPreferences.greVerbal = m.meta_value;
+        else if (m.meta_key === "application_gre_quantitative")
+          userPreferences.greQuantitative = m.meta_value;
+        else if (m.meta_key === "application_gre_writing")
+          userPreferences.greWriting = m.meta_value;
+        else if (m.meta_key === "lsat_test")
+          userPreferences.lsatTest = m.meta_value;
+        else if (m.meta_key === "application_sat_total")
+          userPreferences.satTotal = m.meta_value;
+        else if (m.meta_key === "application_act_total")
+          userPreferences.actTotal = m.meta_value;
       });
     }
 
@@ -1237,6 +1248,7 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
       !isGuest &&
       !ignoreUserDefaults &&
       !(guestFlag === "1" || guestFlag === "true");
+
     const filters = {
       country:
         req.query.country || (useUserDefaults ? userPreferences.country : null),
@@ -1408,7 +1420,17 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
       WHERE pr.status = 'publish'
     `;
 
-    // -------- WHEREs (original) --------
+    const parseCsv = (v) =>
+      typeof v === "string"
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : Array.isArray(v)
+        ? v.map(String)
+        : [];
+
+    // -------- WHEREs --------
     let whereClauses = [];
     let params = [];
 
@@ -1528,7 +1550,7 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
 
     const [programRows] = await db.query(finalBaseQuery, params);
 
-    // -------- Count (original) --------
+    // -------- Count --------
     let countQuery = `
       SELECT COUNT(DISTINCT pr.id) as count
       FROM qacom_wp_apply_programs_relationship pr
@@ -1636,7 +1658,7 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
     const total = countRows[0]?.count || 0;
     const hasMore = page * limit < total;
 
-    // -------- Map rows → programs (original mapping) --------
+    // -------- Map rows → programs --------
     let programs = (programRows || []).map((row) => {
       const fullSchoolLogoUrl = buildUploadsUrl(row.school_logo || "");
       let program_duration = "";
@@ -1784,6 +1806,15 @@ router.get("/find", authenticateTokenOptional, async (req, res) => {
           ? "No programs found for the selected filters"
           : "",
     };
+
+    console.log("[/program-data/find] user =", req.user);
+    console.log(
+      "[/program-data/find] userId =",
+      userId,
+      "metas =",
+      userMetas.length
+    );
+    console.log("[/program-data/find] userPreferences =", userPreferences);
 
     return res.status(200).json(response);
   } catch (error) {
@@ -1936,7 +1967,7 @@ router.post("/program-list", authenticateToken, async (req, res) => {
   }
 });
 
-// GET /program-data/program-list — deadlines exactly like /find (per row, no school-level aggregation)
+// GET /program-data/program-list
 router.get("/program-list", authenticateToken, async (req, res) => {
   try {
     const schoolId =
