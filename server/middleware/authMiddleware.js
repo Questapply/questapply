@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secure-jwt-secret";
-// Middleware for token verification
+
 const PUBLIC_PATHS = new Set([
   "/health",
   "/api/auth/login",
@@ -12,40 +12,65 @@ const PUBLIC_PATHS = new Set([
   "/api/auth/forgot",
 ]);
 
+// سخت‌گیر (بدون مهمان)
 export const authenticateToken = (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   if (PUBLIC_PATHS.has(req.path)) return next();
-  const authHeader = req.headers["authorization"] || "";
 
+  const authHeader = req.headers["authorization"] || "";
   const token = authHeader?.split(" ")[1];
 
   if (!token) {
-    console.log("No token provided");
+    console.log("[auth] No token provided");
     return res.sendStatus(401);
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      console.log("0.5 Token verification failed:", err.message);
+      console.log("[auth] Token verification failed:", err.message);
       return res.sendStatus(403);
     }
-    console.log("0.6 Token verified successfully for user:", user.email);
-    req.user = user;
+
+    req.user = {
+      id: user.id || user.user_id || user.ID || null,
+      email: user.email || user.user_email || null,
+    };
+
+    console.log("[auth] Token verified for:", req.user.email);
     next();
   });
 };
 
-// NEW: optional
+// اختیاری (guest مجاز)
 export const authenticateTokenOptional = (req, res, next) => {
-  const authHeader = req.headers["authorization"] || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (PUBLIC_PATHS.has(req.path)) {
     req.user = null;
     return next();
   }
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    // اگر توکن مشکل داشت، کاربر را مهمان فرض کن اما مسیر را نبند
-    req.user = err ? null : user;
+
+  const authHeader = req.headers["authorization"] || "";
+  const token = authHeader?.split(" ")[1];
+
+  if (!token) {
+    console.log("[authOptional] No token → guest");
+    req.user = null;
+    return next();
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log("[authOptional] Token failed → guest:", err.message);
+      req.user = null;
+      return next();
+    }
+
+    req.user = {
+      id: user.id || user.user_id || user.ID || null,
+      email: user.email || user.user_email || null,
+    };
+
+    console.log("[authOptional] Token OK for:", req.user.email);
     next();
   });
 };
