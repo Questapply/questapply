@@ -26,6 +26,7 @@ dist-ssr
 server/.env*
 frontend/.env*
 backup/
+backend/
 !server/.env.example
 !frontend/.env.example
 !frontend/.env.production
