@@ -348,15 +348,32 @@ const Education: React.FC<EducationProps> = ({ onNext, data }) => {
                 <Label htmlFor={`gpa-${idx}`}>
                   What was your GPA? (out of 4.0)
                 </Label>
-                <Input
-                  id={`gpa-${idx}`}
-                  value={it.gpa}
-                  onChange={(e) => updateField(idx, "gpa", e.target.value)}
-                  placeholder="Enter your GPA (e.g., 3.5)"
-                  className={
-                    errors[idx]?.gpa ? "border-red-500 dark:border-red-500" : ""
-                  }
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id={`gpa-${idx}`}
+                    value={it.gpa}
+                    onChange={(e) => updateField(idx, "gpa", e.target.value)}
+                    placeholder="Enter your GPA (e.g., 3.5)"
+                    className={
+                      errors[idx]?.gpa
+                        ? "border-red-500 dark:border-red-500"
+                        : ""
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.open(
+                        "https://www.scholaro.com/gpa-calculator/",
+                        "_blank",
+                        "noopener,noreferrer"
+                      )
+                    }
+                    className="shrink-0 rounded-md px-3  text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white"
+                  >
+                    GPA Calculator
+                  </button>
+                </div>
                 {errors[idx]?.gpa && (
                   <p className="text-red-500 text-sm">Please enter your GPA</p>
                 )}
